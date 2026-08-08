@@ -1,0 +1,7 @@
+{
+  "descricao": "Dados da clínica que preenchem os placeholders do system prompt. PRÉ-CONDIÇÃO DE GO-LIVE: preencher após a entrevista E2-T1 — enquanto houver campo com '[PREENCHER', o emily.mjs RECUSA rodar fora de --dry-run (e no --dry-run usa fallbacks neutros, nunca o texto do placeholder).",
+  "nome_clinica": "Clínica [PREENCHER na entrevista E2-T1]",
+  "endereco_clinica": "[PREENCHER endereço completo da clínica]",
+  "nome_humano_responsavel": "[PREENCHER quem assume conversas escaladas]",
+  "tabela_precos": "TABELA DE PREÇOS OFICIAL AINDA NÃO CADASTRADA. Nenhum valor está autorizado. Todo pedido de preço deve ser respondido com: os valores são apresentados na avaliação, porque o protocolo é individualizado — e convite para agendar."
+}

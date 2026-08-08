@@ -1,0 +1,15 @@
+{
+  "descricao": "Grade de atendimento da clínica (Wizard-of-Oz). Ajustar após a entrevista E2-T1 com a mãe.",
+  "duracao_min": 60,
+  "antecedencia_horas": 2,
+  "horizonte_dias": 14,
+  "dias": {
+    "seg": ["08:00-12:00", "14:00-18:00"],
+    "ter": ["08:00-12:00", "14:00-18:00"],
+    "qua": ["08:00-12:00", "14:00-18:00"],
+    "qui": ["08:00-12:00", "14:00-18:00"],
+    "sex": ["08:00-12:00", "14:00-18:00"],
+    "sab": ["08:00-12:00"],
+    "dom": []
+  }
+}

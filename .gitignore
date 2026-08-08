@@ -3,4 +3,9 @@ dist/
 .DS_Store
 .env
 .env.*
+!.env.example
 *.log
+
+# Emily Vendas — dados pessoais de leads (LGPD): nunca commitar
+emily-vendas/conversas/
+emily-vendas/agenda.json
