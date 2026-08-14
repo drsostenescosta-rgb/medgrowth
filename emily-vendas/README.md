@@ -7,10 +7,25 @@ emagrecimento (ICP: a clínica da mãe do fundador — PRD `../docs/PRD-clinicno
 pagamento, nada de promessa de resultado. Compliance completo no system prompt
 (`../knowledge/system-prompt-emily-vendas-v1.md`) e nos 2 catálogos de `../knowledge/`.
 
+> **14/08/2026 — camada de operação assistida.** O motor abaixo continua igual; nenhuma linha dele
+> mudou. O que foi somado é a camada que faz uma dona de clínica conseguir operar sem terminal:
+> `regras.mjs` decide a ação de forma determinística (o LLM só *poliria* o texto — decisão em
+> `~/Applications/clinic-now-piloto-familia/docs/decisoes/2026-08-14-a-regra-decide-o-llm-escreve.md`),
+> `voz.mjs` escolhe as palavras, `ledger.mjs` registra quem aprovou o quê, `api.mjs` expõe tudo
+> para o **Painel de Aprovação** do ClinicNow, e `agendor.mjs` espelha a agenda dela (desligado
+> até existir token). Comandos novos: `npm run api`, `npm run shadow:andreia`,
+> `npm run ledger:verificar`, `npm run agendor:descobrir`.
+
 ## Arquivos
 
 | Arquivo | Papel |
 |---|---|
+| `regras.mjs` | **Motor determinístico**: as regras invioláveis da clínica como código testável. Decide a AÇÃO (responder / reperguntar / escalar / bloquear). Default é ESCALAR — não sabe, não inventa |
+| `voz.mjs` | Como a clínica FALA: apelido do serviço ("drenagem", não "drenagem linfática"), hora falada ("2 da tarde", não "14:00") e temperatura conforme a cliente já é de casa |
+| `ledger.mjs` | Aprovações append-only com cadeia de hash: decisão, aprovador, horário, diff da edição. `verificar` \| `fila` \| `stats` |
+| `api.mjs` | Ponte HTTP local (127.0.0.1:4791) que o Painel de Aprovação consome. Allowlist de origem, operador obrigatório. **Não existe rota de envio** |
+| `agendor.mjs` | Espelho SOMENTE LEITURA da agenda do Agendor, atrás de flag. `descobrir` sonda o endpoint real em vez de chutar |
+| `cenarios-andreia.mjs` | Os 5 cenários críticos do piloto contra a configuração real. `--exportar <arquivo>` gera a fila da demo |
 | `emily.mjs` | Motor de conversa: contexto → Claude (JSON) → circuito de escalação → registro. `--texto` (modo operador), `--check` (health check) |
 | `agenda.mjs` | Agenda: `livres`, `marcar`, `confirmar`, `listar` (grade em `agenda-config.json`); `marcar` move o lead p/ `avaliacao_agendada` e cria a tarefa de lembrete de véspera |
 | `funil.mjs` | Board do funil estilo Agendor + `mover`, `toque` (cadência D1/D3/D7 com teto anti-spam) e `retomar` (devolve conversa pausada à Emily) |

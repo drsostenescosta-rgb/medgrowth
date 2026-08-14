@@ -1,0 +1,32 @@
+{
+  "versao": "shadow-operacao.v1",
+  "sintetico": true,
+  "clinica": {
+    "nome_clinica": "Clinica Demonstracao Sintetica",
+    "endereco_clinica": "Local Ficticio 100",
+    "nome_humano_responsavel": "Responsavel Shadow"
+  },
+  "agenda": {
+    "duracao_min": 60,
+    "buffer_min": 10,
+    "antecedencia_horas": 2,
+    "fonte_verdade": "fixture_sintetica_local",
+    "fuso_horario": "America/New_York",
+    "dias": { "seg": ["10:00-18:00"], "ter": [], "qua": [], "qui": [], "sex": [], "sab": [], "dom": [] },
+    "ocupacoes_sinteticas": [{ "inicio": "2026-08-17T10:00:00-04:00", "fim": "2026-08-17T11:00:00-04:00" }]
+  },
+  "operacao": {
+    "modo": "assistido",
+    "responsavel_escalacao": "Responsavel Shadow",
+    "regras": {
+      "confirmacao": { "exige_confirmacao_explicita": true, "reconfirma_termos_ambiguos": true },
+      "cancelamento": { "nao_remove_sem_confirmacao_explicita": true, "revisao_humana_obrigatoria": true },
+      "transparencia": { "identifica_como_assistente": true }
+    },
+    "automacao": { "envio_automatico": false },
+    "revisao_humana_obrigatoria": true,
+    "escalonamento": { "topicos": ["clinico", "urgencia", "pessoal", "preco_nao_autorizado"] },
+    "shadow_sintetico": { "habilitado": true, "revisor_humano": "Responsavel Shadow", "simulacoes": ["novo_pedido", "conflito", "confirmacao_ambigua", "cancelamento", "escalacao_clinica"] },
+    "servicos": [{ "id": "sessao_padrao", "politica_operacional": { "duracao_min": 60, "buffer_min": 10, "requer_confirmacao_explicita": true, "escalar_se_duvida": true } }]
+  }
+}

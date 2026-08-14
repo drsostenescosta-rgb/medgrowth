@@ -6,7 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test emily-vendas/test/*.test.mjs",
+    "shadow:workbench": "node emily-vendas/shadow-workbench.mjs",
+    "shadow:andreia": "node emily-vendas/cenarios-andreia.mjs",
+    "api": "node emily-vendas/api.mjs",
+    "ledger:verificar": "node emily-vendas/ledger.mjs verificar",
+    "agendor:descobrir": "node emily-vendas/agendor.mjs descobrir",
+    "agendor:status": "node emily-vendas/agendor.mjs status"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -1,0 +1,339 @@
+#!/usr/bin/env node
+// api.mjs — ponte HTTP local entre o motor (Node, tem as chaves) e o Painel de Aprovação (navegador).
+//
+// Por que existe: até hoje a Emily só falava por terminal (`node emily.mjs --texto ...`). A Andreia
+// não abre terminal. Esta ponte é o mínimo que transforma o motor existente em algo que uma dona
+// de clínica consegue operar — sem reescrever o motor e sem mudar nenhuma regra.
+//
+// O que esta ponte NUNCA faz:
+//   - enviar mensagem para cliente (não existe rota de envio; o envio é humano, colando no WhatsApp);
+//   - decidir sozinha (a decisão é sempre um POST /api/decisao com nome de aprovador);
+//   - escrever no Agendor (o Agendor é fonte de verdade; aqui só se lê).
+//
+// Segurança (é localhost, mas localhost não é seguro por si só):
+//   - escuta SÓ em 127.0.0.1 — nunca 0.0.0.0;
+//   - Origin allowlist: um site malicioso aberto no mesmo navegador não consegue postar aqui;
+//   - header obrigatório X-ClinicNow-Operador em toda rota que muda estado (força preflight CORS
+//     e registra QUEM está operando);
+//   - webhook do Agendor exige HMAC (agendor.mjs) — POST sem assinatura é 401.
+
+import { createServer } from "node:http";
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
+
+import { avaliarPreflight } from "./preflight.mjs";
+import { decidir } from "./regras.mjs";
+import { fila, historico, novaProposta, registrarDecisao, registrarAcaoAgenda, estatisticas, verificarCadeia } from "./ledger.mjs";
+import { assinaturaValida, configAgendor, gravarEspelho, lerCompromissos, lerEspelho } from "./agendor.mjs";
+import { carregarEnv } from "./lib.mjs";
+
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const PORTA = Number(process.env.CLINICNOW_API_PORT || 4791);
+const ORIGENS_PERMITIDAS = new Set([
+  "http://localhost:5190",
+  "http://127.0.0.1:5190",
+  process.env.CLINICNOW_ORIGEM_EXTRA,
+].filter(Boolean));
+
+const DIR_CONFIG_PADRAO = join(homedir(), "Applications", "clinic-now-piloto-familia", "config");
+function caminhoConfig(nome) {
+  return process.env[`CLINICNOW_CONFIG_${nome.toUpperCase()}`] || join(process.env.CLINICNOW_CONFIG_DIR || DIR_CONFIG_PADRAO, `${nome}.json`);
+}
+
+// ---------------------------------------------------------------- configuração e gate
+const PLACEHOLDER = /\[\s*PREENCHER\b/i;
+
+function lerJson(caminho) {
+  if (!existsSync(caminho)) return null;
+  try {
+    return JSON.parse(readFileSync(caminho, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+export function carregarConfiguracao() {
+  return {
+    clinica: lerJson(caminhoConfig("clinica-config")),
+    agenda: lerJson(caminhoConfig("agenda-config")),
+    operacao: lerJson(caminhoConfig("operacao-assistida")),
+  };
+}
+
+function temPlaceholder(v) {
+  if (typeof v === "string") return PLACEHOLDER.test(v);
+  if (Array.isArray(v)) return v.some(temPlaceholder);
+  if (v && typeof v === "object") return Object.values(v).some(temPlaceholder);
+  return false;
+}
+
+/**
+ * O gate é o coração da Fase 1: o preflight não é um lint que ninguém lê — ele MUDA o que a
+ * Emily pode fazer. Enquanto reprovado, o painel opera em modo sintético e a Emily não oferece
+ * horário, não menciona sinal e não usa tom "validado".
+ */
+export function calcularGate(cfg) {
+  const erros = avaliarPreflight(cfg);
+  const gradeDefinida = Boolean(cfg.agenda?.dias) && !temPlaceholder(cfg.agenda.dias)
+    && Object.values(cfg.agenda.dias).some((faixas) => Array.isArray(faixas) && faixas.some((f) => /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(String(f))));
+  const tomValidado = Array.isArray(cfg.clinica?.voz?.respostas_modelo_no_tom_dela)
+    && cfg.clinica.voz.respostas_modelo_no_tom_dela.length > 0
+    && !temPlaceholder(cfg.clinica.voz.respostas_modelo_no_tom_dela);
+  return {
+    preflight_aprovado: erros.length === 0,
+    erros_preflight: erros,
+    grade_definida: gradeDefinida,
+    tom_validado: tomValidado,
+    // Enquanto o preflight reprova, TUDO é sintético. É isto que impede dado real de entrar cedo.
+    modo_sintetico: erros.length > 0,
+    pendencias_abertas: [
+      !gradeDefinida && "2.3 — grade de horários semanais (AM/PM ambíguo)",
+      !tomValidado && "6.5 — três respostas-modelo no tom da Andreia",
+      temPlaceholder(cfg.operacao?.exemplos_para_avaliacao) && "9.1/9.2 — exemplos anonimizados",
+      temPlaceholder(cfg.operacao?.retencao_de_registros) && "7.3 — política de retenção",
+      temPlaceholder(cfg.operacao?.sinal_e_lista_de_espera) && "4.6 — sinal e lista de espera",
+    ].filter(Boolean),
+  };
+}
+
+// ---------------------------------------------------------------- polimento opcional pelo LLM
+/**
+ * O LLM NÃO decide — ele só reescreve o rascunho no tom certo. Se a chave estiver inválida
+ * (é o caso hoje: 401) devolve o texto da regra intacto e diz que não poliu. A operação não para.
+ */
+export async function polirTexto({ texto, decisao, cfg }) {
+  if (!process.env.ANTHROPIC_API_KEY) return { texto, polido: false, motivo: "ANTHROPIC_API_KEY ausente" };
+  try {
+    const { chamarClaude } = await import("./emily.mjs");
+    const voz = cfg.clinica?.voz || {};
+    const system = [
+      "Você reescreve UMA mensagem de WhatsApp no tom da clínica. Você NÃO decide nada:",
+      "a ação já foi decidida por regra determinística e não pode mudar.",
+      `Tom: ${voz.formalidade || "informal"}, ${voz.tamanho_mensagem || "curta"}.`,
+      `Emojis permitidos: ${(voz.emojis_aprovados || []).join(" ")}.`,
+      `Proibido: ${(voz.evitar || []).join("; ")}.`,
+      "Não invente horário, preço, prazo, promessa de resultado ou informação clínica.",
+      "Responda só com o texto final, sem aspas e sem comentário.",
+    ].join("\n");
+    const { texto: saida } = await chamarClaude({
+      model: process.env.EMILY_MODEL || "claude-sonnet-4-5",
+      system,
+      messages: [{ role: "user", content: `Ação decidida: ${decisao.regra}\nRascunho: ${texto}` }],
+      maxTokens: 300,
+    });
+    const limpo = String(saida || "").trim();
+    return limpo ? { texto: limpo, polido: true } : { texto, polido: false, motivo: "resposta vazia" };
+  } catch (e) {
+    return { texto, polido: false, motivo: e.message.slice(0, 200) };
+  }
+}
+
+// ---------------------------------------------------------------- ocupações (Agendor → espelho → local)
+export async function ocupacoesAtuais() {
+  const espelho = lerEspelho();
+  if (espelho.disponivel && !espelho.obsoleto) {
+    return { fonte: "agendor_espelho", frescor_min: espelho.frescor_min, ocupacoes: espelho.compromissos };
+  }
+  const cfgAg = configAgendor();
+  return {
+    fonte: "indisponivel",
+    motivo: espelho.disponivel ? `espelho obsoleto (${espelho.frescor_min} min)` : cfgAg.motivo || espelho.motivo,
+    // Sem espelho fresco a lista vem vazia — e a regra 12 impede afirmar disponibilidade.
+    ocupacoes: espelho.disponivel ? espelho.compromissos : [],
+  };
+}
+
+// ---------------------------------------------------------------- HTTP
+function json(res, status, corpo) {
+  const texto = JSON.stringify(corpo);
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  res.end(texto);
+}
+
+function cors(req, res) {
+  const origem = req.headers.origin;
+  if (!origem) return true; // curl/local, sem navegador
+  if (!ORIGENS_PERMITIDAS.has(origem)) return false;
+  res.setHeader("Access-Control-Allow-Origin", origem);
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-ClinicNow-Operador");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Vary", "Origin");
+  return true;
+}
+
+async function corpoJson(req, limite = 64 * 1024) {
+  const partes = [];
+  let total = 0;
+  for await (const p of req) {
+    total += p.length;
+    if (total > limite) throw new Error("corpo grande demais");
+    partes.push(p);
+  }
+  const bruto = Buffer.concat(partes).toString("utf8");
+  return { bruto, dados: bruto ? JSON.parse(bruto) : {} };
+}
+
+export function criarHandler({ agendaMarcar = null } = {}) {
+  return async function handler(req, res) {
+    const url = new URL(req.url, `http://127.0.0.1:${PORTA}`);
+    if (!cors(req, res)) return json(res, 403, { erro: "origem não permitida" });
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      return res.end();
+    }
+
+    const cfg = carregarConfiguracao();
+    const gate = calcularGate(cfg);
+
+    try {
+      // ---- estado geral: é o que o painel usa para se pintar de "modo sintético"
+      if (req.method === "GET" && url.pathname === "/api/estado") {
+        return json(res, 200, {
+          clinica: cfg.clinica?.nome_clinica || null,
+          gate,
+          motor_llm: {
+            chave_presente: Boolean(process.env.ANTHROPIC_API_KEY),
+            // Não testamos a chave a cada request; o painel mostra "não verificada" e o
+            // polimento degrada sozinho se ela estiver inválida.
+            observacao: "A ação é sempre decidida por regra. O LLM só poliria o texto.",
+          },
+          agendor: { ...configAgendor(), token: undefined, espelho: lerEspelho() },
+          ledger: verificarCadeia(),
+          estatisticas: estatisticas(),
+        });
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/fila") {
+        return json(res, 200, { fila: fila(), gate });
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/historico") {
+        return json(res, 200, { historico: historico() });
+      }
+
+      // ---- nova mensagem → proposta (NÃO envia nada, NÃO mexe na agenda)
+      if (req.method === "POST" && url.pathname === "/api/proposta") {
+        const operador = req.headers["x-clinicnow-operador"];
+        if (!operador) return json(res, 400, { erro: "header X-ClinicNow-Operador obrigatório" });
+        const { dados } = await corpoJson(req);
+        const { canal = "whatsapp", alias, mensagem, contexto = {} } = dados;
+        if (!alias || !mensagem) return json(res, 400, { erro: "alias e mensagem são obrigatórios" });
+
+        const oc = await ocupacoesAtuais();
+        const decisao = decidir({
+          mensagem,
+          operacao: cfg.operacao || {},
+          agenda: cfg.agenda || {},
+          contexto: { ...contexto, ocupacoes: contexto.ocupacoes || oc.ocupacoes },
+          gate,
+        });
+
+        const polimento = await polirTexto({ texto: decisao.resposta_sugerida, decisao, cfg });
+        decisao.resposta_sugerida = polimento.texto;
+        decisao.texto_polido_por_llm = polimento.polido;
+        if (!polimento.polido) decisao.motivo_sem_polimento = polimento.motivo;
+        decisao.origem_ocupacoes = { fonte: oc.fonte, motivo: oc.motivo, frescor_min: oc.frescor_min };
+
+        const id = novaProposta({
+          canal,
+          alias,
+          mensagem,
+          decisao_motor: decisao,
+          contexto,
+          modoSintetico: gate.modo_sintetico,
+        });
+        return json(res, 201, { id, decisao, gate });
+      }
+
+      // ---- decisão humana: o único caminho que faz qualquer coisa acontecer
+      if (req.method === "POST" && url.pathname === "/api/decisao") {
+        const operador = req.headers["x-clinicnow-operador"];
+        if (!operador) return json(res, 400, { erro: "header X-ClinicNow-Operador obrigatório" });
+        const { dados } = await corpoJson(req);
+        const { id, decisao, texto_final, texto_original, motivo_da_decisao } = dados;
+
+        const pendente = fila().find((p) => p.id === id);
+        if (!pendente) return json(res, 404, { erro: "proposta não está pendente" });
+
+        const evento = registrarDecisao({
+          id,
+          decisao,
+          aprovador: String(operador),
+          texto_original: texto_original ?? pendente.decisao_motor?.resposta_sugerida,
+          texto_final,
+          motivo_da_decisao,
+          modoSintetico: gate.modo_sintetico,
+        });
+
+        // Ação de agenda só acontece com decisão "aprovada" E ação proposta do tipo marcar.
+        let agendaResultado = null;
+        const acao = pendente.decisao_motor?.acao_agenda;
+        if (decisao === "aprovada" && acao?.tipo === "marcar") {
+          if (!gate.preflight_aprovado) {
+            agendaResultado = { ok: false, motivo: "preflight reprovado — agenda real bloqueada (fail-closed)" };
+          } else if (typeof agendaMarcar === "function") {
+            try {
+              agendaResultado = { ok: true, item: await agendaMarcar(acao) };
+            } catch (e) {
+              agendaResultado = { ok: false, motivo: e.message };
+            }
+          } else {
+            agendaResultado = { ok: false, motivo: "executor de agenda não configurado" };
+          }
+          registrarAcaoAgenda({ id, resultado: agendaResultado.ok ? "executada" : "bloqueada", detalhe: agendaResultado, modoSintetico: gate.modo_sintetico });
+        }
+
+        return json(res, 200, {
+          ok: true,
+          evento: { seq: evento.seq, hash: evento.hash },
+          agenda: agendaResultado,
+          // Repetido na resposta para o painel poder exibir: aprovar ≠ enviar.
+          lembrete: "Mensagem aprovada NÃO foi enviada. Copie e cole no WhatsApp — o envio é humano na Fase 1.",
+        });
+      }
+
+      // ---- webhook do Agendor: escuta assinada, só atualiza o espelho
+      if (req.method === "POST" && url.pathname === "/webhooks/agendor") {
+        const { bruto } = await corpoJson(req);
+        const segredo = process.env.AGENDOR_WEBHOOK_SECRET;
+        if (!assinaturaValida({ corpoBruto: bruto, assinatura: req.headers["x-clinicnow-signature"], segredo })) {
+          return json(res, 401, { erro: "assinatura inválida" });
+        }
+        const r = await lerCompromissos({});
+        if (r.disponivel) gravarEspelho(r.compromissos);
+        return json(res, 200, { ok: true, ressincronizado: r.disponivel, motivo: r.motivo });
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/ledger/verificar") {
+        return json(res, 200, verificarCadeia());
+      }
+
+      return json(res, 404, { erro: "rota desconhecida" });
+    } catch (e) {
+      return json(res, 500, { erro: e.message });
+    }
+  };
+}
+
+// ---------------------------------------------------------------- boot
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  carregarEnv();
+  const { marcar } = await import("./agenda.mjs");
+  const servidor = createServer(criarHandler({ agendaMarcar: (acao) => marcar(acao) }));
+  // 127.0.0.1 explícito: nunca expor esta ponte na rede.
+  servidor.listen(PORTA, "127.0.0.1", () => {
+    const cfg = carregarConfiguracao();
+    const gate = calcularGate(cfg);
+    console.log(`[api] ponte de aprovação em http://127.0.0.1:${PORTA}`);
+    console.log(`[api] clínica: ${cfg.clinica?.nome_clinica || "(config não encontrada)"}`);
+    console.log(`[api] preflight: ${gate.preflight_aprovado ? "APROVADO" : `REPROVADO (${gate.erros_preflight.length} problema(s))`}`);
+    console.log(`[api] modo: ${gate.modo_sintetico ? "SINTÉTICO (nenhum dado real aceito)" : "operação real"}`);
+    if (gate.pendencias_abertas.length) console.log(`[api] pendências: ${gate.pendencias_abertas.join(" | ")}`);
+  });
+}

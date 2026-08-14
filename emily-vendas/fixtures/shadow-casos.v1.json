@@ -1,0 +1,11 @@
+{
+  "versao": "shadow-casos.v1",
+  "sintetico": true,
+  "casos": [
+    { "id": "novo_pedido", "tipo": "novo_pedido", "intencao": "solicitar_horario", "horario_solicitado": "2026-08-17T12:00:00-04:00", "alternativas_sinteticas": ["2026-08-17T13:10:00-04:00", "2026-08-17T14:20:00-04:00"] },
+    { "id": "conflito", "tipo": "conflito", "intencao": "solicitar_horario", "horario_solicitado": "2026-08-17T10:30:00-04:00", "alternativas_sinteticas": ["2026-08-17T11:10:00-04:00", "2026-08-17T12:20:00-04:00"] },
+    { "id": "confirmacao_ambigua", "tipo": "confirmacao_ambigua", "intencao": "aceite_ambiguo", "termo": "ta_bom" },
+    { "id": "cancelamento", "tipo": "cancelamento", "intencao": "cancelamento_ambiguo", "termo": "talvez_cancelar" },
+    { "id": "escalacao_clinica", "tipo": "escalacao_clinica", "intencao": "duvida_clinica", "categoria": "clinico" }
+  ]
+}

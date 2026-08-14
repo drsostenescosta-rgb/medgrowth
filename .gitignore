@@ -9,3 +9,13 @@ dist/
 # Emily Vendas — dados pessoais de leads (LGPD): nunca commitar
 emily-vendas/conversas/
 emily-vendas/agenda.json
+emily-vendas/operacao-assistida.json
+
+# Relatórios locais do workbench sintético: nunca conter dados reais nem entram no Git.
+emily-vendas/.shadow-reports/
+
+# Ledger de aprovações: guarda o TEXTO das mensagens revisadas. Fica local, nunca no Git.
+emily-vendas/aprovacoes.jsonl
+
+# Espelho e sondagem do Agendor: agenda dela + resposta crua da API. Local apenas.
+emily-vendas/.agendor/
