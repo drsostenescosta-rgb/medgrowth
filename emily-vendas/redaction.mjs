@@ -74,3 +74,43 @@ export const PADRAO_ALIAS_SINTETICO = /^(?:Cliente|Paciente) Demo \d{2}$/;
 export function validarAliasSintetico(valor) {
   return PADRAO_ALIAS_SINTETICO.test(String(valor || "").trim());
 }
+
+// ---------------------------------------------------------------- redação (modo operação real)
+/**
+ * Substitui os formatos sensíveis por marcadores, em vez de recusar a gravação.
+ *
+ * Por que existe: no modo sintético a política é RECUSAR — e isso está certo enquanto o piloto
+ * é ensaio. Mas quando Sostenes começa a operar de verdade pela Andreia, recusar a mensagem da
+ * cliente torna o sistema inutilizável, e um sistema inutilizável vira planilha paralela — que é
+ * pior para a LGPD do que um ledger redigido.
+ *
+ * Então, na operação real: o texto é gravado SEM telefone, e-mail, SSN nem data de nascimento.
+ * O que sobra (o conteúdo da conversa) é o mínimo necessário para auditar a aprovação.
+ * O que isto NÃO resolve continua escrito no painel e no kit: nome próprio não é detectável,
+ * e a política de retenção (por quantos dias guardar) é a pendência 7.3, que só a Andreia fecha.
+ */
+const MARCADOR = {
+  EMAIL_ENCONTRADO: "[e-mail removido]",
+  TELEFONE_ENCONTRADO: "[telefone removido]",
+  SSN_ENCONTRADO: "[documento removido]",
+  DATA_ENCONTRADA: "[data removida]",
+};
+
+export function redigirTexto(texto) {
+  let saida = String(texto ?? "");
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(saida.trim())) return saida; // timestamp ISO é estrutural
+  for (const [padrao, codigo] of PADROES_TEXTO) {
+    const global = new RegExp(padrao.source, padrao.flags.includes("g") ? padrao.flags : `${padrao.flags}g`);
+    saida = saida.replace(global, MARCADOR[codigo] || "[removido]");
+  }
+  return saida;
+}
+
+/** Redige recursivamente todas as strings de um payload, preservando a estrutura. */
+export function redigirSensiveis(valor) {
+  if (Array.isArray(valor)) return valor.map(redigirSensiveis);
+  if (valor && typeof valor === "object") {
+    return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, redigirSensiveis(v)]));
+  }
+  return typeof valor === "string" ? redigirTexto(valor) : valor;
+}

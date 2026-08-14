@@ -16,7 +16,7 @@ import { appendFileSync, existsSync, readFileSync, mkdirSync, writeFileSync } fr
 import { createHash, randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exigirSomenteSintetico, validarAliasSintetico } from "./redaction.mjs";
+import { exigirSomenteSintetico, redigirSensiveis, validarAliasSintetico } from "./redaction.mjs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 export const ARQ_LEDGER = join(ROOT, "aprovacoes.jsonl");
@@ -158,10 +158,13 @@ function ultimoHash(arquivo) {
  * Grava um evento. `modoSintetico` liga o scanner de PII: enquanto o preflight estiver
  * REPROVADO, qualquer telefone, e-mail ou campo de paciente reprova a escrita inteira.
  */
-export function registrar({ tipo, payload, modoSintetico = true, arquivo = ARQ_LEDGER, permitirAncoraDivergente = false }) {
+export function registrar({ tipo, payload, modoSintetico = true, arquivo = ARQ_LEDGER, permitirAncoraDivergente = false, redigir = false }) {
   if (!TIPOS_EVENTO.includes(tipo)) throw new Error(`tipo de evento desconhecido: ${tipo}`);
   if (!payload || typeof payload !== "object") throw new Error("payload obrigatório");
-  if (modoSintetico) exigirSomenteSintetico(payload);
+  // Modo sintético RECUSA dado sensível. Operação real REDIGE antes de gravar — e depois
+  // confere: se ainda sobrar algo, recusa mesmo assim. Redigir e verificar, nunca só confiar.
+  if (redigir) payload = redigirSensiveis(payload);
+  if (modoSintetico || redigir) exigirSomenteSintetico(payload);
 
   const eventos = lerTudo(arquivo);
 
@@ -207,7 +210,7 @@ export function novoId() {
   return Array.from(randomBytes(16), (b) => String.fromCharCode(97 + (b % 26))).join("");
 }
 
-export function novaProposta({ canal, alias, mensagem, decisao_motor, contexto = {}, modoSintetico = true, arquivo = ARQ_LEDGER }) {
+export function novaProposta({ canal, alias, mensagem, decisao_motor, contexto = {}, modoSintetico = true, arquivo = ARQ_LEDGER, redigir = false }) {
   // Em modo sintético o identificador da pessoa tem de ser um alias artificial estrito. Sem isto,
   // "Larissa Mendes" entraria no ledger sem o scanner piscar — ele reconhece formatos, não nomes.
   if (modoSintetico && !validarAliasSintetico(alias)) {
@@ -220,6 +223,7 @@ export function novaProposta({ canal, alias, mensagem, decisao_motor, contexto =
   registrar({
     tipo: "proposta_criada",
     modoSintetico,
+    redigir,
     arquivo,
     payload: { id, canal, alias, mensagem, decisao_motor, contexto },
   });
@@ -258,6 +262,7 @@ export function registrarDecisao({
   motivo_da_decisao = "",
   modoSintetico = true,
   arquivo = ARQ_LEDGER,
+  redigir = false,
 }) {
   if (!DECISOES.includes(decisao)) throw new Error(`decisão inválida: ${decisao}`);
   if (!aprovador || !String(aprovador).trim()) throw new Error("aprovador obrigatório — decisão anônima não é aprovação");
@@ -275,6 +280,7 @@ export function registrarDecisao({
   return registrar({
     tipo: "decisao_humana",
     modoSintetico,
+    redigir,
     arquivo,
     payload: {
       id,

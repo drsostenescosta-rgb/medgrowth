@@ -38,6 +38,20 @@ const ORIGENS_PERMITIDAS = new Set([
   process.env.CLINICNOW_ORIGEM_EXTRA,
 ].filter(Boolean));
 
+/**
+ * MODO OPERAÇÃO REAL. Desligado por padrão.
+ *
+ * Ligado (`CLINICNOW_MODO_OPERACAO=true`), o painel deixa de ser ensaio: aceita a mensagem real
+ * da cliente e um apelido escolhido por quem opera. Em troca, TODO texto gravado passa pela
+ * redação — telefone, e-mail, documento e data de nascimento viram marcador antes de tocar o
+ * disco, e o ledger confere depois de redigir. Recusar a mensagem real tornaria o sistema
+ * inutilizável, e sistema inutilizável vira planilha paralela, que é pior para a LGPD.
+ *
+ * O que continua aberto e está dito no painel: nome próprio não é detectável, e a política de
+ * retenção (pendência 7.3) é da Andreia.
+ */
+const MODO_OPERACAO = String(process.env.CLINICNOW_MODO_OPERACAO || "").toLowerCase() === "true";
+
 const DIR_CONFIG_PADRAO = join(homedir(), "Applications", "clinic-now-piloto-familia", "config");
 function caminhoConfig(nome) {
   return process.env[`CLINICNOW_CONFIG_${nome.toUpperCase()}`] || join(process.env.CLINICNOW_CONFIG_DIR || DIR_CONFIG_PADRAO, `${nome}.json`);
@@ -87,8 +101,13 @@ export function calcularGate(cfg) {
     erros_preflight: erros,
     grade_definida: gradeDefinida,
     tom_validado: tomValidado,
-    // Enquanto o preflight reprova, TUDO é sintético. É isto que impede dado real de entrar cedo.
-    modo_sintetico: erros.length > 0,
+    // Enquanto o preflight reprova, TUDO é sintético — a menos que a operação real esteja
+    // explicitamente ligada, e aí a proteção deixa de ser "recusar" e passa a ser "redigir".
+    modo_sintetico: erros.length > 0 && !MODO_OPERACAO,
+    modo_operacao: MODO_OPERACAO,
+    protecao_dados: MODO_OPERACAO
+      ? "operação real: telefone, e-mail, documento e data são REDIGIDOS antes de gravar. Nome próprio não é detectável — evite sobrenome. Retenção (7.3) segue pendente."
+      : "modo sintético: dado sensível é RECUSADO e só apelidos 'Cliente Demo NN' são aceitos.",
     pendencias_abertas: [
       !gradeDefinida && "2.3 — grade de horários semanais (AM/PM ambíguo)",
       !tomValidado && "6.5 — três respostas-modelo no tom da Andreia",
@@ -351,6 +370,7 @@ export function criarHandler({ agendaMarcar = null } = {}) {
           decisao_motor: decisao,
           contexto,
           modoSintetico: gate.modo_sintetico,
+          redigir: MODO_OPERACAO,
         });
         return json(res, 201, { id, decisao, gate });
       }
@@ -373,6 +393,7 @@ export function criarHandler({ agendaMarcar = null } = {}) {
           texto_final,
           motivo_da_decisao,
           modoSintetico: gate.modo_sintetico,
+          redigir: MODO_OPERACAO,
         });
 
         // Ação de agenda só acontece com decisão "aprovada" E ação proposta do tipo marcar.
@@ -437,7 +458,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     console.log(`[api] ponte de aprovação em http://127.0.0.1:${PORTA}`);
     console.log(`[api] clínica: ${cfg.clinica?.nome_clinica || "(config não encontrada)"}`);
     console.log(`[api] preflight: ${gate.preflight_aprovado ? "APROVADO" : `REPROVADO (${gate.erros_preflight.length} problema(s))`}`);
-    console.log(`[api] modo: ${gate.modo_sintetico ? "SINTÉTICO (nenhum dado real aceito)" : "operação real"}`);
+    console.log(`[api] modo: ${MODO_OPERACAO ? "OPERAÇÃO REAL (texto redigido antes de gravar)" : "SINTÉTICO (dado real é recusado)"}`);
     if (gate.pendencias_abertas.length) console.log(`[api] pendências: ${gate.pendencias_abertas.join(" | ")}`);
   });
 }
