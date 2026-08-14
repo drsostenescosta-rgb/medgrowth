@@ -68,15 +68,35 @@ const URGENCIA = [
   "sangrado", "mucho dolor", "fiebre", "ayuda", "no aguanto",
 ];
 
-// Sinais de intercorrência de pós-operatório: regra 6 manda escalar QUALQUER um.
-const POS_OP_SINAL = [
+// Sinais de intercorrência (regra 6). Divididos em DOIS níveis porque o alarme vermelho só vale
+// enquanto for raro: `temSinalCorporal` disparava em adjetivo de cor solto e gritava PRIORIDADE
+// ALTA para "comprei uma bolsa roxa" e "o sofá da recepção é vermelho". Seis falsos em dez.
+// A terceira bolsa roxa da semana ensina a Andreia a ignorar a faixa — e aí o pus de verdade
+// passa batido. É a mesma lição do verificador que acusa adulteração sem adulteração nenhuma.
+
+// FORTE: não existe uso inocente. Dispara sozinho.
+const SINAL_FORTE = [
+  "pus", "secrecao", "secrecoes", "deiscencia", "necrose", "infeccionou", "infeccao",
+  "abriu o ponto", "ponto abriu", "abriu o corte", "cheiro ruim", "seroma",
+  "discharge", "infected", "infection", "necrosis", "infeccion",
+];
+
+// FRACO: só é sinal com referência ao corpo por perto (ou com serviço de pós-operatório).
+// Sozinhos descrevem vestido, sofá, bolsa e luz de máquina.
+const SINAL_FRACO = [
   "inchado", "inchada", "inchaco", "inchacao", "vermelho", "vermelha", "vermelhidao",
-  "pus", "secrecao", "abriu o ponto", "ponto abriu", "deiscencia",
-  "seroma", "fibrose", "endurecido", "endurecida", "roxo", "roxa", "hematoma", "necrose",
-  "cheiro ruim", "infeccionou", "infeccao", "drenando",
-  // inglês / espanhol
-  "swollen", "swelling", "redness", "pus", "discharge", "infected", "infection",
-  "hinchado", "hinchada", "enrojecimiento", "infeccion",
+  "roxo", "roxa", "endurecido", "endurecida", "hematoma", "fibrose", "drenando",
+  "liquido", "líquido", "saindo algo", "ardendo", "latejando",
+  "swollen", "swelling", "redness", "hinchado", "hinchada", "enrojecimiento",
+];
+
+// O que faz um adjetivo virar relato clínico: estar falando do próprio corpo.
+const REFERENCIA_CORPORAL = [
+  "barriga", "abdome", "abdomen", "perna", "pernas", "braco", "bracos", "costas",
+  "gluteo", "gluteos", "bumbum", "coxa", "coxas", "cintura", "flanco", "pele",
+  "cicatriz", "ponto", "pontos", "corte", "local", "lugar", "regiao", "area",
+  "seio", "seios", "mama", "mamas", "umbigo", "dreno", "curativo",
+  "meu corpo", "minha pele", "onde fiz", "onde operei",
 ];
 const POS_OP_CONTEXTO = ["pos operatorio", "pos-operatorio", "pos op", "cirurgia", "operei", "lipo", "abdominoplastia", "protese"];
 
@@ -91,7 +111,8 @@ const CLINICO = [
   // que dispara, escrita de qualquer jeito.
   "gravida", "gravidez", "gestante", "esperando bebe", "esperando nene", "esperando um bebe",
   "amamentando", "amamentacao", "pregnant", "embarazada",
-  "anticoagulante", "trombose", "diabetes", "cancer", "quimioterapia", "marcapasso",
+  "anticoagulante", "trombose", "diabetes", "quimioterapia", "marcapasso",
+  "tenho cancer", "com cancer", "cancer de mama", "tratei cancer", "tive cancer",
   "hipertensa", "pressao alta", "alergia", "alergica", "epilepsia", "lupus",
   "menor de idade", "tenho 16 anos", "tenho 17 anos", "minha filha de",
 ];
@@ -120,7 +141,8 @@ const CANCELAMENTO = [
   // Formas de desmarcar que não usam a palavra "cancelar" — "amanhã não vou dar, desculpa".
   "nao vou dar", "nao vai dar", "nao da pra ir", "nao dá pra ir", "nao posso ir",
   "nao poderei", "nao vou aparecer", "nao consigo mais", "nao deu pra ir", "nao vou hoje",
-  "cancel", "reschedule", "cancelar mi cita",
+  // Sem termos em inglês/espanhol aqui: o portão de idioma dispara ANTES desta regra, então
+  // "cancel" e "cancelar mi cita" nunca chegariam — vocabulário nascido morto engana quem lê.
 ];
 
 const ATRASO = ["atrasada", "atrasado", "vou chegar tarde", "estou a caminho mas", "vou me atrasar", "atraso"];
@@ -138,9 +160,16 @@ const NEGACAO_DE_AGENDAMENTO = [
   "nao poderei", "nao quero mais", "nao rola", "can't", "cant make", "won't be able",
 ];
 
+// Pedido EXPLÍCITO de horário: sobrevive a uma negação na mesma frase.
+const PEDIDO_EXPLICITO = [
+  "que horas", "tem horario", "qual horario", "tem disponibilidade", "tem vaga",
+  "quero marcar", "quero agendar", "posso marcar", "da pra marcar", "quero remarcar para",
+  "tem outro horario", "tem algum horario", "consegue outro",
+];
+
+// Pedido IMPLÍCITO: só citar um dia já sugere agendamento, mas uma negação por perto inverte.
 const PEDIDO_HORARIO = [
-  "que horas", "tem horario", "qual horario", "tem disponibilidade", "disponivel",
-  "quero marcar", "quero agendar", "posso marcar", "da pra marcar", "agendar",
+  ...PEDIDO_EXPLICITO, "disponivel", "agendar",
   "amanha", "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo",
 ];
 
@@ -308,9 +337,20 @@ export function ehUrgencia(msg) {
   return contem(msg, URGENCIA);
 }
 
-/** Há sinal corporal preocupante na mensagem? (independe de sabermos se ela é pós-operatório) */
-export function temSinalCorporal(msg) {
-  return contem(msg, POS_OP_SINAL);
+/** O serviço da cliente é pós-operatório? Basta isso para um sinal fraco virar relato clínico. */
+function servicoEhPosOp(contexto = {}) {
+  return contem(contexto.servico || "", ["pos-operatorio", "pos operatorio", "pos op", "pos"]);
+}
+
+/**
+ * Há sinal corporal preocupante na mensagem?
+ * FORTE dispara sozinho. FRACO exige referência ao corpo (ou serviço de pós-op) — senão
+ * "comprei uma bolsa roxa" acende o alarme vermelho e o alarme deixa de significar alguma coisa.
+ */
+export function temSinalCorporal(msg, contexto = {}) {
+  if (contem(msg, SINAL_FORTE)) return true;
+  if (!contem(msg, SINAL_FRACO)) return false;
+  return contem(msg, REFERENCIA_CORPORAL) || Boolean(contexto.pos_operatorio) || servicoEhPosOp(contexto);
 }
 
 /**
@@ -320,9 +360,8 @@ export function temSinalCorporal(msg) {
  * num negócio em que pós-operatório é o serviço de US$ 100.
  */
 export function ehIntercorrenciaPosOp(msg, contexto = {}) {
-  if (!temSinalCorporal(msg)) return false;
-  const servicoEhPosOp = contem(contexto.servico || "", ["pos-operatorio", "pos operatorio", "pos op"]);
-  return contem(msg, POS_OP_CONTEXTO) || Boolean(contexto.pos_operatorio) || servicoEhPosOp;
+  if (!temSinalCorporal(msg, contexto)) return false;
+  return contem(msg, POS_OP_CONTEXTO) || Boolean(contexto.pos_operatorio) || servicoEhPosOp(contexto);
 }
 
 // ---------------------------------------------------------------- idioma
@@ -333,18 +372,31 @@ export function ehIntercorrenciaPosOp(msg, contexto = {}) {
 //   1. casamento por palavra inteira (senão "esperando" conta como o inglês "and");
 //   2. nada de palavra que exista nos dois idiomas — "for", "para", "por favor" e "no" são
 //      armadilhas: "sim, se for de manhã" era classificado como inglês por causa de "for".
+// Disciplina desta lista, aprendida em duas rodadas de auditoria:
+//   1. casamento por palavra inteira (senão "esperando" conta como o inglês "and");
+//   2. NENHUM token que exista também em português. Foi assim que `"do"` — uma das palavras mais
+//      comuns do português — entrou na lista de inglês e passou a escalar "qual o valor do pós?",
+//      "o preço do pacote mudou?", "tá saindo um liquido do lugar". Nove em vinte mensagens
+//      normais iam para a Andreia com um motivo que ela sabe que é falso, e regra que mente
+//      perde a autoridade inteira do painel.
+// Tokens banidos por ambiguidade pt/en/es: do, am, is, are, esta, una, no, para, por favor, for.
 const MARCADORES = {
   pt: ["nao", "voce", "vc", "obrigada", "obrigado", "ola", "bom dia", "boa tarde", "boa noite",
     "quero", "posso", "preciso", "horario", "amanha", "hoje", "meu", "minha", "pra", "pro",
     "tudo bem", "sim", "que", "uma", "muito", "estou", "tenho", "fazer", "dia", "voces",
-    "esta", "sao", "entao", "tambem", "ja", "aqui", "isso", "seu", "sua", "ele", "ela"],
-  en: ["the", "you", "your", "i'm", "im", "could", "please", "thanks", "thank",
-    "appointment", "tomorrow", "today", "how much", "my", "with", "what", "when",
-    "there", "it's", "its", "am", "is", "are", "do", "does", "can", "will", "would"],
+    "sao", "entao", "tambem", "ja", "aqui", "isso", "seu", "sua", "ele", "ela", "valor",
+    "preco", "quanto", "onde", "quando", "qual", "com", "dos", "das", "pelo", "pela"],
+  en: ["the", "you", "your", "i'm", "could", "please", "thanks", "thank", "appointment",
+    "tomorrow", "today", "how much", "my", "with", "what", "when", "there", "it's",
+    "can", "will", "would", "need", "want", "have", "book", "schedule", "available", "does"],
   es: ["gracias", "usted", "manana", "hoy", "quiero", "necesito", "cita", "cuanto", "puedo",
-    "buenos dias", "buenas tardes", "muy", "tengo", "hacer", "los", "las", "una", "esta",
-    "cuesta", "drenaje", "tambien", "ustedes", "quisiera"],
+    "buenos dias", "buenas tardes", "muy", "tengo", "hacer", "los", "las",
+    "cuesta", "drenaje", "tambien", "ustedes", "quisiera", "quisiera saber", "el masaje"],
 };
+
+// Para AFIRMAR idioma estrangeiro é preciso evidência, não um token solto.
+const PLACAR_MINIMO_IDIOMA = 2;
+const MARGEM_MINIMA_IDIOMA = 2;
 
 /**
  * Devolve "pt" | "en" | "es" | null. `null` significa "não sei" e, pela regra dela, pode virar
@@ -360,9 +412,10 @@ export function detectarIdioma(msg) {
   const ordenado = Object.entries(pontos).sort((a, b) => b[1] - a[1]);
   const [melhor, placar] = ordenado[0];
   const [, segundo] = ordenado[1];
-  if (placar === 0) return null;
-  // Empate = não sei. Fail-closed.
-  if (placar === segundo) return null;
+  // Um token solto não basta: exige placar mínimo E margem mínima sobre o segundo colocado.
+  // Sem isto, uma única palavra ambígua decidia o idioma de uma frase inteira.
+  if (placar < PLACAR_MINIMO_IDIOMA) return null;
+  if (placar - segundo < MARGEM_MINIMA_IDIOMA) return null;
   return melhor;
 }
 
@@ -494,7 +547,7 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
   // Sinal corporal sem contexto de pós-op ("minha barriga tá inchada e vermelha desde ontem").
   // Antes isto caía no default silencioso. Sinal no corpo de alguém nunca é caso de "não sei":
   // é escalada com prioridade, mesmo que a gente não saiba se ela operou.
-  if (temSinalCorporal(texto)) {
+  if (temSinalCorporal(texto, ctx)) {
     return resultado({
       ...base,
       acao: "escalar",
@@ -691,9 +744,12 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
   }
 
   // ---- 10. encaixe / horário: conflito bloqueia antes de qualquer oferta (regra 2)
-  // A negação vem antes de tudo: citar um dia da semana numa frase negativa NÃO é pedir horário.
-  const pedeHorario = !contem(texto, NEGACAO_DE_AGENDAMENTO)
-    && (contem(texto, PEDIDO_HORARIO) || contem(texto, ENCAIXE));
+  // A negação veta o pedido implícito ("amanhã não vou dar" não é querer marcar), mas NÃO veta
+  // um pedido explícito na mesma frase: "não posso de manhã, tem horário à tarde?" continua
+  // sendo um pedido de horário. Veto cego mandava isso para o default silencioso.
+  const pedidoExplicito = contem(texto, PEDIDO_EXPLICITO);
+  const pedeHorario = pedidoExplicito
+    || (!contem(texto, NEGACAO_DE_AGENDAMENTO) && (contem(texto, PEDIDO_HORARIO) || contem(texto, ENCAIXE)));
   if (pedeHorario && ctx.horario_alvo) {
     const conflitos = conflitosEm({
       inicio: ctx.horario_alvo,

@@ -112,7 +112,50 @@ export function calcularGate(cfg) {
  */
 const PROMESSA = /\b(garant|assegur|com certeza vai|resultado garantido|vai resolver|fica perfeit|elimina de vez)/i;
 
-export function validarPolimento(original, polido) {
+/**
+ * Vocabulário que viola um bloqueio SEM usar nenhum algarismo. Foi o furo da rodada 2: o
+ * validador só sabia contar dígito, e passava "posso te encaixar amanhã de manhã, pode ser?",
+ * "consigo sim encaixar você hoje à tarde" e "tem vaga sim, pode vir quando quiser".
+ * Nenhuma tem número, moeda ou "garanto" — todas oferecem horário, que é exatamente o que a
+ * pendência 2.3 proíbe. E a nossa própria voz escreve hora por extenso ("2 da tarde"), então
+ * contar algarismo nunca ia bastar.
+ */
+const VOCAB_POR_BLOQUEIO = [
+  {
+    bloqueios: ["não afirmar disponibilidade", "não oferecer horário específico"],
+    termos: [
+      "encaixar", "encaixo", "te encaixo", "posso te", "consigo sim", "consigo te",
+      "tem vaga", "tenho vaga", "tá livre", "esta livre", "está livre", "pode vir",
+      "deixa comigo", "de manha", "de manhã", "a tarde", "à tarde", "de tarde", "de noite",
+      "amanha", "amanhã", "hoje", "segunda", "terça", "terca", "quarta", "quinta", "sexta",
+      "sabado", "sábado", "domingo", "meio-dia", "quando quiser", "que horas prefere",
+    ],
+  },
+  {
+    bloqueios: ["não mencionar valor de sinal", "não prometer lista de espera"],
+    termos: ["sinal", "deposito", "depósito", "lista de espera", "reservar pagando"],
+  },
+  {
+    bloqueios: ["nenhum valor fora do catálogo", "nenhum desconto", "desconto direto proibido"],
+    termos: ["desconto", "promoção", "promocao", "condição especial", "mais barato", "cortesia"],
+  },
+  {
+    bloqueios: ["nenhuma indicação de procedimento", "nenhum diagnóstico"],
+    termos: ["recomendo", "indico", "você precisa de", "no seu caso", "o ideal pra você"],
+  },
+];
+
+function contemTermo(texto, termo) {
+  const n = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return new RegExp(`(^|[^a-z0-9])${n(termo).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`).test(n(texto));
+}
+
+/**
+ * @param {string} original  rascunho produzido pela regra
+ * @param {string} polido    reescrita do LLM
+ * @param {string[]} bloqueios  os bloqueios que a decisão carrega — o validador AGORA os lê
+ */
+export function validarPolimento(original, polido, bloqueios = []) {
   const numeros = (s) => (String(s).match(/\d+/g) || []).join(",");
   if (numeros(polido) !== numeros(original)) {
     return { ok: false, motivo: "polimento introduziu ou alterou números (horário, preço ou quantidade)" };
@@ -125,6 +168,15 @@ export function validarPolimento(original, polido) {
   }
   if (polido.length > original.length * 2.5) {
     return { ok: false, motivo: "polimento ficou desproporcionalmente longo — provável alucinação" };
+  }
+  // O coração da checagem: se a decisão proíbe algo, a reescrita não pode reintroduzir por palavra.
+  for (const grupo of VOCAB_POR_BLOQUEIO) {
+    if (!grupo.bloqueios.some((b) => bloqueios.includes(b))) continue;
+    for (const termo of grupo.termos) {
+      if (contemTermo(polido, termo) && !contemTermo(original, termo)) {
+        return { ok: false, motivo: `polimento reintroduziu "${termo}", que a decisão bloqueia` };
+      }
+    }
   }
   return { ok: true };
 }
@@ -156,7 +208,7 @@ export async function polirTexto({ texto, decisao, cfg }) {
     });
     const limpo = String(saida || "").trim();
     if (!limpo) return { texto, polido: false, motivo: "resposta vazia" };
-    const v = validarPolimento(texto, limpo);
+    const v = validarPolimento(texto, limpo, decisao?.bloqueios || []);
     // Reescrita reprovada não vira rascunho: fica o texto da regra e o motivo aparece no painel.
     if (!v.ok) return { texto, polido: false, motivo: `polimento REJEITADO — ${v.motivo}` };
     return { texto: limpo, polido: true };

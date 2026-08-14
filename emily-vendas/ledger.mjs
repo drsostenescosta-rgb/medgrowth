@@ -118,13 +118,24 @@ export function verificarCadeia(arquivo = ARQ_LEDGER) {
     anterior = ev.hash;
   });
 
-  // Confronto com a âncora externa: é o que pega truncamento e reescrita completa.
+  // Confronto com a âncora externa: pega truncamento, reescrita completa E append forjado.
   const ancora = lerAncora(arquivo);
   if (ancora) {
     if (eventos.length < ancora.total) {
-      quebras.push({ seq: eventos.length, campo: "ancora.total", esperado: ancora.total, encontrado: eventos.length, nota: "eventos DESAPARECERAM do arquivo" });
+      quebras.push({ seq: eventos.length, campo: "ancora.total", esperado: ancora.total, encontrado: eventos.length, explicacao: "eventos DESAPARECERAM do arquivo" });
     } else if (eventos.length === ancora.total && anterior !== ancora.ultimo_hash) {
-      quebras.push({ seq: eventos.length, campo: "ancora.ultimo_hash", esperado: ancora.ultimo_hash, encontrado: anterior, nota: "arquivo foi reescrito inteiro" });
+      quebras.push({ seq: eventos.length, campo: "ancora.ultimo_hash", esperado: ancora.ultimo_hash, encontrado: anterior, explicacao: "arquivo foi reescrito inteiro" });
+    } else if (eventos.length > ancora.total) {
+      // O ataque mais provável de todos: apendar "a Andreia aprovou isto" com o hash recalculado
+      // e não tocar na âncora. É exatamente a alegação que este ledger existe para defender, e
+      // passava. Toda escrita legítima atualiza a âncora — se sobrou evento, ele não passou aqui.
+      quebras.push({
+        seq: ancora.total,
+        campo: "ancora.total",
+        esperado: ancora.total,
+        encontrado: eventos.length,
+        explicacao: `${eventos.length - ancora.total} evento(s) APARECERAM sem passar pelo registro`,
+      });
     }
   }
 
@@ -147,12 +158,28 @@ function ultimoHash(arquivo) {
  * Grava um evento. `modoSintetico` liga o scanner de PII: enquanto o preflight estiver
  * REPROVADO, qualquer telefone, e-mail ou campo de paciente reprova a escrita inteira.
  */
-export function registrar({ tipo, payload, modoSintetico = true, arquivo = ARQ_LEDGER }) {
+export function registrar({ tipo, payload, modoSintetico = true, arquivo = ARQ_LEDGER, permitirAncoraDivergente = false }) {
   if (!TIPOS_EVENTO.includes(tipo)) throw new Error(`tipo de evento desconhecido: ${tipo}`);
   if (!payload || typeof payload !== "object") throw new Error("payload obrigatório");
   if (modoSintetico) exigirSomenteSintetico(payload);
 
   const eventos = lerTudo(arquivo);
+
+  // A âncora é conferida ANTES de gravar. Sem isto, a próxima mensagem normal regravava a âncora
+  // e APAGAVA o alarme de adulteração: o arquivo era truncado, `verificar` acusava, e um único
+  // atendimento depois voltava a dizer "ÍNTEGRA" — a evidência sumia justamente porque a operação
+  // continuou. Alarme que se apaga sozinho é pior que alarme nenhum.
+  if (!permitirAncoraDivergente) {
+    const estado = verificarCadeia(arquivo);
+    if (!estado.ok) {
+      throw new Error(
+        `ledger com integridade QUEBRADA — gravação recusada para não apagar a evidência. ` +
+          `Problemas: ${JSON.stringify(estado.quebras)}. ` +
+          `Investigue e, se for o caso, rode: node ledger.mjs reancorar --confirmo "<seu nome>" "<motivo>"`,
+      );
+    }
+  }
+
   const anterior = eventos.length ? eventos[eventos.length - 1].hash : GENESIS;
   const corpo = { tipo, ...payload, ts: payload.ts || new Date().toISOString() };
   const evento = {
@@ -273,6 +300,36 @@ export function registrarAcaoAgenda({ id, resultado, detalhe = {}, modoSintetico
   });
 }
 
+/**
+ * Reancorar: única saída legítima quando a integridade quebra.
+ *
+ * Existe porque, sem ela, a saída seria editar à mão um dot-file escondido — exatamente o gesto
+ * que a âncora deveria tornar suspeito. E porque o sistema foi entregue uma vez com o alarme
+ * tocando e sem botão para desligá-lo direito.
+ *
+ * NÃO apaga nada: grava no próprio ledger um evento `nota_operacional` dizendo quem reancorou,
+ * quando, por quê e qual era a divergência. Quem reancorar deixa marca permanente.
+ */
+export function reancorar({ aprovador, motivo, arquivo = ARQ_LEDGER, modoSintetico = true }) {
+  if (!aprovador || !String(aprovador).trim()) throw new Error("reancorar exige um nome — reancoragem anônima não vale");
+  if (!motivo || !String(motivo).trim()) throw new Error("reancorar exige um motivo escrito");
+  const antes = verificarCadeia(arquivo);
+  const evento = registrar({
+    tipo: "nota_operacional",
+    modoSintetico,
+    arquivo,
+    permitirAncoraDivergente: true,
+    payload: {
+      acao: "reancoragem",
+      aprovador: String(aprovador).trim(),
+      motivo: String(motivo).trim().slice(0, 300),
+      divergencia_encontrada: antes.quebras,
+      total_antes: antes.total,
+    },
+  });
+  return { ok: true, evento: { seq: evento.seq, hash: evento.hash }, divergencia_registrada: antes.quebras };
+}
+
 // ---------------------------------------------------------------- consultas
 /** Propostas ainda sem decisão humana — é isto que o painel mostra como fila. */
 export function fila(arquivo = ARQ_LEDGER) {
@@ -329,7 +386,23 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     console.log(JSON.stringify(fila(), null, 2));
   } else if (cmd === "stats") {
     console.log(JSON.stringify(estatisticas(), null, 2));
+  } else if (cmd === "reancorar") {
+    const args = process.argv.slice(3);
+    if (!args.includes("--confirmo")) {
+      console.error('Reancorar apaga o alarme de integridade e deixa marca permanente no ledger.');
+      console.error('Uso: node ledger.mjs reancorar --confirmo "<seu nome>" "<motivo>"');
+      process.exit(1);
+    }
+    const [nome, motivo] = args.filter((a) => a !== "--confirmo");
+    try {
+      const r = reancorar({ aprovador: nome, motivo });
+      console.log(`Reancorado por ${nome}. Divergência registrada no evento #${r.evento.seq}.`);
+      console.log(JSON.stringify(r.divergencia_registrada, null, 2));
+    } catch (e) {
+      console.error(`Erro: ${e.message}`);
+      process.exit(1);
+    }
   } else {
-    console.log("Comandos: verificar | fila | stats");
+    console.log('Comandos: verificar | fila | stats | reancorar --confirmo "<nome>" "<motivo>"');
   }
 }

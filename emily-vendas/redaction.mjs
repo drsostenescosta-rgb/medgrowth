@@ -18,8 +18,8 @@ const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 
 // Telefone com separadores: 508-334-1234, (508) 334 1234, 555.555.1212
 const TELEFONE_SEPARADO = /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,3}\)?[\s.-]?)?\d{3}[\s.-]\d{4}\b/;
-// Telefone corrido: 5083341234, 11987654321 — 10 a 13 dígitos seguidos.
-const TELEFONE_CORRIDO = /(?<!\d)\d{10,13}(?!\d)/;
+// Telefone corrido: 5083341234, 11987654321, 123456789 — 9 a 15 dígitos seguidos.
+const TELEFONE_CORRIDO = /(?<!\d)\d{9,15}(?!\d)/;
 // Internacional com prefixo: +55 11 98765 4321, +1 508 334 1234
 const TELEFONE_INTERNACIONAL = /\+\d{1,3}[\s.-]?\d[\d\s.-]{7,}/;
 // SSN dos EUA — a clínica é em Massachusetts.

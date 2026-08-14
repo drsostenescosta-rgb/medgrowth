@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { decidir, detectarIdioma, ehCondicional, ehTentativaDeManipulacao, temSinalCorporal } from "../regras.mjs";
 import { montar, terminarFrase } from "../voz.mjs";
 import { escanearDadosSensiveis, validarAliasSintetico } from "../redaction.mjs";
-import { novaProposta, registrarDecisao, verificarCadeia } from "../ledger.mjs";
+import { hashDe, lerTudo, novaProposta, reancorar, registrarDecisao, verificarCadeia } from "../ledger.mjs";
 import { validarPolimento } from "../api.mjs";
 import { carregarConfigAndreia, GATE_HOJE } from "../cenarios-andreia.mjs";
 
@@ -42,7 +42,14 @@ test("G7 — sinal no corpo nunca cai no caminho silencioso", () => {
   const r = d("minha barriga tá muito inchada e vermelha desde ontem");
   assert.equal(r.regra, "R6.SINAL_CLINICO");
   assert.ok(r.alertas.some((a) => /PRIORIDADE ALTA/.test(a)), "sinal corporal exige prioridade alta");
-  assert.equal(temSinalCorporal("tá inchada e vermelha"), true);
+
+  // Corrigido na rodada 3: adjetivo de cor/inchaço SOZINHO não é sinal — era assim que
+  // "comprei uma bolsa roxa" acendia o alarme vermelho. Precisa de referência ao corpo,
+  // de contexto de pós-op, ou ser um sinal forte (pus, secreção, deiscência, necrose).
+  assert.equal(temSinalCorporal("tá inchada e vermelha"), false, "sem referência ao corpo, não é sinal");
+  assert.equal(temSinalCorporal("minha barriga tá inchada"), true);
+  assert.equal(temSinalCorporal("tá inchada", { servico: "Pós-operatório" }), true);
+  assert.equal(temSinalCorporal("tá saindo pus"), true, "sinal forte dispara sozinho");
 });
 
 test("G7 — o serviço da cliente basta para caracterizar intercorrência de pós-op", () => {
@@ -247,4 +254,79 @@ test("todas as decisões, mesmo as novas, exigem aprovação e não enviam nada"
     assert.equal(r.requer_aprovacao_humana, true, m);
     assert.equal(r.envio_automatico, false, m);
   }
+});
+
+// ---------------------------------------------------------------- Rodada 2 (71/100)
+test("G-B — append de aprovação forjada é detectado (o ataque mais provável de todos)", () => {
+  const arq = arquivoTemp();
+  const id = novaProposta({ canal: "whatsapp", alias: "Cliente Demo 20", mensagem: "oi", decisao_motor: {}, arquivo: arq });
+  registrarDecisao({ id, decisao: "aprovada", aprovador: "Sostenes", texto_original: "texto verdadeiro", arquivo: arq });
+
+  const evs = lerTudo(arq);
+  const ant = evs[evs.length - 1].hash;
+  const corpo = { tipo: "decisao_humana", id: "forjado", decisao: "aprovada", aprovador: "Andreia Carvalho", texto_final: "nunca aprovei isso", envio_automatico: false, ts: "2026-08-14T20:00:00.000Z" };
+  writeFileSync(arq, readFileSync(arq, "utf8") + JSON.stringify({ seq: evs.length, hash_anterior: ant, hash: hashDe(ant, corpo), payload: corpo }) + "\n");
+
+  const r = verificarCadeia(arq);
+  assert.equal(r.ok, false, "append forjado tem de ser detectado");
+  assert.ok(r.quebras.some((q) => /APARECERAM/.test(q.explicacao || "")));
+});
+
+test("G-B — a escrita normal NÃO apaga o alarme de adulteração", () => {
+  const arq = arquivoTemp();
+  const id = novaProposta({ canal: "whatsapp", alias: "Cliente Demo 21", mensagem: "oi", decisao_motor: {}, arquivo: arq });
+  registrarDecisao({ id, decisao: "aprovada", aprovador: "Sostenes", texto_original: "x", arquivo: arq });
+  // Trunca: o alarme acende.
+  writeFileSync(arq, readFileSync(arq, "utf8").trim().split("\n").slice(0, -1).join("\n") + "\n");
+  assert.equal(verificarCadeia(arq).ok, false);
+  // A próxima mensagem normal regravava a âncora e apagava a evidência. Agora é recusada.
+  assert.throws(
+    () => novaProposta({ canal: "whatsapp", alias: "Cliente Demo 22", mensagem: "oi", decisao_motor: {}, arquivo: arq }),
+    /integridade QUEBRADA — gravação recusada/,
+  );
+  assert.equal(verificarCadeia(arq).ok, false, "o alarme tem de continuar aceso");
+});
+
+test("G-C — reancorar é a saída legítima, exige nome e motivo, e deixa marca permanente", () => {
+  const arq = arquivoTemp();
+  const id = novaProposta({ canal: "whatsapp", alias: "Cliente Demo 23", mensagem: "oi", decisao_motor: {}, arquivo: arq });
+  registrarDecisao({ id, decisao: "aprovada", aprovador: "Sostenes", texto_original: "x", arquivo: arq });
+  writeFileSync(arq, readFileSync(arq, "utf8").trim().split("\n").slice(0, -1).join("\n") + "\n");
+
+  assert.throws(() => reancorar({ aprovador: "", motivo: "x", arquivo: arq }), /exige um nome/);
+  assert.throws(() => reancorar({ aprovador: "Sostenes", motivo: "", arquivo: arq }), /exige um motivo/);
+
+  const r = reancorar({ aprovador: "Sostenes", motivo: "limpei o ledger em teste", arquivo: arq });
+  assert.equal(r.ok, true);
+  assert.equal(verificarCadeia(arq).ok, true, "depois de reancorar, a cadeia volta a fechar");
+
+  const marca = lerTudo(arq).find((e) => e.payload.acao === "reancoragem");
+  assert.equal(marca.payload.aprovador, "Sostenes");
+  assert.ok(marca.payload.divergencia_encontrada.length > 0, "a divergência fica registrada para sempre");
+});
+
+test("G-D — o validador de polimento lê os bloqueios da decisão, não só os dígitos", () => {
+  const bloqueios = ["não afirmar disponibilidade", "não oferecer horário específico"];
+  const rascunho = "Vou confirmar os horários com a Andreia.";
+  // Nenhuma destas tem dígito, moeda ou "garanto" — todas oferecem horário.
+  for (const p of [
+    "Posso te encaixar amanhã de manhã, pode ser?",
+    "Consigo sim encaixar você hoje à tarde, deixa comigo",
+    "Tem vaga sim, pode vir quando quiser",
+  ]) {
+    assert.equal(validarPolimento(rascunho, p, bloqueios).ok, false, `deveria rejeitar: ${p}`);
+  }
+  // E a reescrita legítima continua passando.
+  assert.equal(validarPolimento(rascunho, "Vou falar com a Andreia e já te aviso.", bloqueios).ok, true);
+  // Sem o bloqueio ativo, o mesmo texto é aceitável (a regra é que manda).
+  assert.equal(validarPolimento(rascunho, "Tem vaga sim.", []).ok, true);
+});
+
+test("G-D — bloqueio de desconto e de indicação clínica também são checados", () => {
+  assert.equal(validarPolimento("Sobre valor quem fala é a Andreia.", "Consigo um desconto pra você.", ["desconto direto proibido"]).ok, false);
+  assert.equal(validarPolimento("A Andreia responde.", "No seu caso eu indico a drenagem.", ["nenhuma indicação de procedimento"]).ok, false);
+});
+
+test("scanner — sequência de 9 dígitos também é recusada", () => {
+  assert.ok(escanearDadosSensiveis({ msg: "123456789" }).some((a) => a.codigo === "TELEFONE_ENCONTRADO"));
 });
