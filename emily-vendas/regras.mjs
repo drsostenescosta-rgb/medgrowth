@@ -84,19 +84,43 @@ const SINAL_FORTE = [
 // FRACO: só é sinal com referência ao corpo por perto (ou com serviço de pós-operatório).
 // Sozinhos descrevem vestido, sofá, bolsa e luz de máquina.
 const SINAL_FRACO = [
-  "inchado", "inchada", "inchaco", "inchacao", "vermelho", "vermelha", "vermelhidao",
+  // Formas verbais junto com as adjetivas: "meu tornozelo inchou" é a mesma queixa de
+  // "meu tornozelo tá inchado", e faltava.
+  "inchado", "inchada", "inchaco", "inchacao", "inchou", "inchando", "inchar", "incha",
+  "vermelho", "vermelha", "vermelhidao", "avermelhado", "avermelhada",
   "roxo", "roxa", "endurecido", "endurecida", "hematoma", "fibrose", "drenando",
   "liquido", "líquido", "saindo algo", "ardendo", "latejando",
   "swollen", "swelling", "redness", "hinchado", "hinchada", "enrojecimiento",
 ];
 
 // O que faz um adjetivo virar relato clínico: estar falando do próprio corpo.
+// A lista sozinha nunca fica completa — faltavam pé, mão e tornozelo, que numa clínica de
+// drenagem linfática são A queixa. Por isso a lista é só metade da regra; a outra metade é a
+// PRIMEIRA PESSOA logo abaixo, que cobre a cauda longa sem depender de eu lembrar "panturrilha".
 const REFERENCIA_CORPORAL = [
   "barriga", "abdome", "abdomen", "perna", "pernas", "braco", "bracos", "costas",
   "gluteo", "gluteos", "bumbum", "coxa", "coxas", "cintura", "flanco", "pele",
   "cicatriz", "ponto", "pontos", "corte", "local", "lugar", "regiao", "area",
   "seio", "seios", "mama", "mamas", "umbigo", "dreno", "curativo",
+  "pe", "pes", "mao", "maos", "tornozelo", "tornozelos", "joelho", "joelhos",
+  "rosto", "pescoco", "panturrilha", "canela", "dedo", "dedos", "virilha",
+  "axila", "quadril", "ombro", "olho", "olhos", "corpo",
   "meu corpo", "minha pele", "onde fiz", "onde operei",
+];
+
+// Falar de si na primeira pessoa + um sinal já é relato corporal, mesmo sem a parte do corpo
+// estar na lista: "tô com o pé inchado", "amanheci com a mão dura".
+const PRIMEIRA_PESSOA = [
+  "meu", "minha", "meus", "minhas", "to com", "tô com", "estou com",
+  "fiquei com", "ficou", "amanheci", "acordei com", "senti", "tá doendo", "ta doendo",
+];
+
+// ...exceto quando a primeira pessoa se refere claramente a um objeto. "meu carro é vermelho"
+// não é queixa clínica, e o alarme vermelho só serve enquanto for raro.
+const OBJETO_NAO_CORPO = [
+  "carro", "bolsa", "vestido", "roupa", "blusa", "calca", "sapato", "sofa", "parede",
+  "luz", "maquina", "celular", "casa", "cabelo", "unha", "esmalte", "pacote", "caixa",
+  "porta", "tapete", "almofada", "toalha", "lencol", "signo",
 ];
 const POS_OP_CONTEXTO = ["pos operatorio", "pos-operatorio", "pos op", "cirurgia", "operei", "lipo", "abdominoplastia", "protese"];
 
@@ -173,7 +197,11 @@ const PEDIDO_HORARIO = [
   "amanha", "segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo",
 ];
 
-const PRECO = ["quanto custa", "qual o valor", "qual valor", "preco", "quanto e", "quanto fica", "how much", "valores", "tabela"];
+// Sem "how much" aqui: era o único termo estrangeiro numa regra que RESPONDE. Numa frase curta
+// ("how much?") a margem do portão de idioma não é alcançada e a cliente recebia a tabela de
+// preços em português. Fora da lista, a frase curta cai no default e escala — que é o que a
+// configuração dela manda fazer com idioma não identificado.
+const PRECO = ["quanto custa", "qual o valor", "qual valor", "preco", "quanto e", "quanto fica", "valores", "tabela"];
 
 const SINAL = ["sinal", "deposito", "adiantamento", "pagar antes", "reservar pagando"];
 
@@ -350,7 +378,10 @@ function servicoEhPosOp(contexto = {}) {
 export function temSinalCorporal(msg, contexto = {}) {
   if (contem(msg, SINAL_FORTE)) return true;
   if (!contem(msg, SINAL_FRACO)) return false;
-  return contem(msg, REFERENCIA_CORPORAL) || Boolean(contexto.pos_operatorio) || servicoEhPosOp(contexto);
+  if (contem(msg, REFERENCIA_CORPORAL)) return true;
+  if (Boolean(contexto.pos_operatorio) || servicoEhPosOp(contexto)) return true;
+  // Cauda longa: primeira pessoa + sinal, desde que não esteja falando de um objeto.
+  return contem(msg, PRIMEIRA_PESSOA) && !contem(msg, OBJETO_NAO_CORPO);
 }
 
 /**

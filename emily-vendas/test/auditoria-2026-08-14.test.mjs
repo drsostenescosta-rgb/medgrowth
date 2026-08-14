@@ -330,3 +330,31 @@ test("G-D — bloqueio de desconto e de indicação clínica também são checad
 test("scanner — sequência de 9 dígitos também é recusada", () => {
   assert.ok(escanearDadosSensiveis({ msg: "123456789" }).some((a) => a.codigo === "TELEFONE_ENCONTRADO"));
 });
+
+// ---------------------------------------------------------------- Rodada 3 (87/100)
+test("F2 — 'íntegra' sem âncora é um estado DIFERENTE, e verificarCadeia deixa isso legível", () => {
+  const arq = arquivoTemp();
+  // Dia 1: sem arquivo e sem âncora. A cadeia "fecha", mas não há proteção nenhuma.
+  const zero = verificarCadeia(arq);
+  assert.equal(zero.ok, true);
+  assert.equal(zero.ancora.presente, false, "quem lê precisa poder distinguir isto de protegido");
+
+  // Depois de ancorar, o estado muda de verdade.
+  reancorar({ aprovador: "Sostenes", motivo: "início da operação", arquivo: arq });
+  const depois = verificarCadeia(arq);
+  assert.equal(depois.ancora.presente, true);
+  assert.equal(depois.ok, true);
+});
+
+test("F2 — zerar arquivo E âncora não pode passar despercebido", () => {
+  const arq = arquivoTemp();
+  const id = novaProposta({ canal: "whatsapp", alias: "Cliente Demo 30", mensagem: "oi", decisao_motor: {}, arquivo: arq });
+  registrarDecisao({ id, decisao: "aprovada", aprovador: "Sostenes", texto_original: "x", arquivo: arq });
+  assert.equal(verificarCadeia(arq).ancora.presente, true);
+
+  writeFileSync(arq, "");
+  writeFileSync(`${arq}.ancora.json`, "");
+  const r = verificarCadeia(arq);
+  // A cadeia vazia "fecha" — o que denuncia é a âncora ter sumido junto.
+  assert.equal(r.ancora.presente, false, "a ausência de âncora é o único sinal que sobra, e precisa aparecer");
+});

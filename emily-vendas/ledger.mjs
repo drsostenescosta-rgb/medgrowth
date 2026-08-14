@@ -381,7 +381,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (cmd === "verificar") {
     const r = verificarCadeia();
     console.log(r.ok ? `Cadeia ÍNTEGRA — ${r.total} evento(s).` : `Cadeia QUEBRADA: ${JSON.stringify(r.quebras, null, 2)}`);
-    process.exit(r.ok ? 0 : 1);
+    // "ÍNTEGRA" sem âncora e "ÍNTEGRA com âncora" são estados MUITO diferentes, e a linha acima
+    // não os distinguia: zerar arquivo + âncora juntos dava "ÍNTEGRA — 0 evento(s)". Quem lê
+    // precisa ver que não há proteção nenhuma contra reescrita.
+    if (!r.ancora.presente) {
+      console.log("⚠ ÂNCORA AUSENTE — sem proteção contra reescrita ou apagamento do arquivo.");
+      console.log('  Ancore antes de operar: node ledger.mjs reancorar --confirmo "<seu nome>" "início da operação"');
+    }
+    process.exit(r.ok && r.ancora.presente ? 0 : 1);
   } else if (cmd === "fila") {
     console.log(JSON.stringify(fila(), null, 2));
   } else if (cmd === "stats") {

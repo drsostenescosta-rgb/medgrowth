@@ -148,3 +148,39 @@ test("corpus — com a grade pendente, nenhuma resposta do corpus oferece horár
     assert.doesNotMatch(t, /\b\d{1,2}\s*(h\b|:\d{2})/, `"${m}" ofereceu horário: ${t}`);
   }
 });
+
+// ---------------------------------------------------------------- Rodada 3: cauda longa do corpo
+// A lista de partes do corpo nunca fica completa. Numa clínica de drenagem linfática, pé e
+// tornozelo inchado é A queixa — e faltavam os dois. A regra de classe é primeira pessoa + sinal.
+const QUEIXAS_CORPORAIS = [
+  "tô com o pé inchado",
+  "minha mão tá inchada",
+  "meu braço tá vermelho",
+  "meu tornozelo inchou muito",
+  "amanheci com a perna inchada",
+  "meu joelho tá roxo",
+  "ficou tudo endurecido onde fiz",
+];
+
+test("corpus — queixa corporal na primeira pessoa acende, mesmo fora da lista de partes", () => {
+  for (const m of QUEIXAS_CORPORAIS) {
+    assert.ok(temSinalCorporal(m), `"${m}" deveria ser sinal corporal`);
+    assert.ok(ehAlta(d(m)), `"${m}" deveria ser PRIORIDADE ALTA`);
+  }
+});
+
+test("corpus — primeira pessoa sobre OBJETO continua sem acender", () => {
+  for (const m of ["meu carro é vermelho", "minha bolsa é roxa", "meu vestido vermelho chegou", "meu cabelo ficou roxo"]) {
+    assert.equal(temSinalCorporal(m), false, `"${m}" não é queixa clínica`);
+    assert.equal(ehAlta(d(m)), false, `"${m}" não pode ser PRIORIDADE ALTA`);
+  }
+});
+
+test('corpus — "how much?" curto escala em vez de responder a tabela em português', () => {
+  // Era o único termo estrangeiro numa regra que RESPONDE: a frase curta não alcançava a margem
+  // do portão de idioma e a cliente recebia os preços em português.
+  assert.notEqual(d("how much?").regra, "COM.PRECO_CATALOGO");
+  assert.equal(d("how much is the massage?").regra, "IDIOMA.NAO_IDENTIFICADO");
+  // E a pergunta de preço em português continua sendo respondida.
+  assert.equal(d("quanto custa a drenagem?").regra, "COM.PRECO_CATALOGO");
+});
