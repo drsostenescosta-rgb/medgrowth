@@ -178,5 +178,20 @@ export function montar({ nivel = "conhecida", primeiroNome = null, corpo, comAbe
     vistos.add(e);
     return e;
   });
-  return texto.replace(/\s{2,}/g, " ").replace(/\s+([.,!?])/g, "$1").trim();
+  texto = texto.replace(/\s{2,}/g, " ").replace(/\s+([.,!?])/g, "$1").trim();
+  // O dedup pode ter tirado o emoji que TERMINAVA a frase ("Já te falo 😘" → "Já te falo"),
+  // deixando um fragmento sem pontuação na tela. Fecha a frase em vez de entregar pela metade.
+  return terminarFrase(texto);
+}
+
+const FIM_DE_FRASE = /[.!?…]$/u;
+
+/** Garante que a mensagem termine em pontuação ou emoji — nunca pendurada. */
+export function terminarFrase(texto) {
+  const t = String(texto || "").trim();
+  if (!t) return t;
+  if (FIM_DE_FRASE.test(t)) return t;
+  // Termina em emoji? Então já está fechada visualmente.
+  if (/\p{Extended_Pictographic}(?:️)?$/u.test(t)) return t;
+  return `${t}.`;
 }

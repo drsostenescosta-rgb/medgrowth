@@ -16,6 +16,7 @@ emily-vendas/.shadow-reports/
 
 # Ledger de aprovações: guarda o TEXTO das mensagens revisadas. Fica local, nunca no Git.
 emily-vendas/aprovacoes.jsonl
+emily-vendas/.aprovacoes-ancora.json
 
 # Espelho e sondagem do Agendor: agenda dela + resposta crua da API. Local apenas.
 emily-vendas/.agendor/

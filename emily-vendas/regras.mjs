@@ -27,15 +27,26 @@ export function norm(texto) {
     .trim();
 }
 
-function contem(alvo, termos) {
-  const t = norm(alvo);
-  return termos.some((termo) => t.includes(norm(termo)));
+function escapar(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Casa palavra inteira — evita que "ok" dispare dentro de "okinawa". */
-function contemPalavra(alvo, palavras) {
+/**
+ * Casa TERMO INTEIRO (palavra ou expressão), nunca pedaço de outra palavra.
+ *
+ * Isto já foi busca por substring, e o Sheldon Pai derrubou a entrega por causa disso: o termo
+ * "er " (de emergency room) casava dentro de "fazer ", "anteriores e", "mulher " — e transformava
+ * "posso fazer drenagem?" em urgência médica. Substring em lista de vocabulário é uma fábrica de
+ * falso positivo silencioso: cada termo curto novo envenena todas as mensagens.
+ */
+function contem(alvo, termos) {
   const t = norm(alvo);
-  return palavras.some((p) => new RegExp(`(^|[^a-z0-9])${norm(p)}([^a-z0-9]|$)`).test(t));
+  return termos.some((termo) => new RegExp(`(^|[^a-z0-9])${escapar(norm(termo))}([^a-z0-9]|$)`).test(t));
+}
+
+/** Mesmo casamento; o nome existe para deixar a intenção explícita em quem chama. */
+function contemPalavra(alvo, palavras) {
+  return contem(alvo, palavras);
 }
 
 // ---------------------------------------------------------------- vocabulário das regras
@@ -44,18 +55,28 @@ function contemPalavra(alvo, palavras) {
 
 const OPT_OUT = ["parar", "sair", "nao quero mais receber", "me tira da lista", "stop", "unsubscribe"];
 
+// Urgência em pt/en/es. A clínica atende nos três idiomas: um alerta de sangramento escrito em
+// inglês não pode cair no caminho silencioso só porque os detectores nasceram em português.
 const URGENCIA = [
   "urgente", "urgencia", "emergencia", "socorro", "pelo amor de deus",
   "muita dor", "dor forte", "nao aguento", "sangrando", "sangramento",
-  "febre", "passando mal", "hospital", "pronto socorro", "emergency",
+  "febre", "passando mal", "hospital", "pronto socorro",
+  // inglês
+  "emergency", "urgent", "bleeding", "a lot of pain", "severe pain", "so much pain",
+  "can't stand", "cant stand", "fever", "help me", "emergency room", "hurts so",
+  // espanhol
+  "sangrado", "mucho dolor", "fiebre", "ayuda", "no aguanto",
 ];
 
 // Sinais de intercorrência de pós-operatório: regra 6 manda escalar QUALQUER um.
 const POS_OP_SINAL = [
-  "inchado", "inchaco", "inchacao", "vermelho", "vermelhidao", "quente",
+  "inchado", "inchada", "inchaco", "inchacao", "vermelho", "vermelha", "vermelhidao",
   "pus", "secrecao", "abriu o ponto", "ponto abriu", "deiscencia",
-  "seroma", "fibrose", "endurecido", "roxo", "hematoma", "necrose",
+  "seroma", "fibrose", "endurecido", "endurecida", "roxo", "roxa", "hematoma", "necrose",
   "cheiro ruim", "infeccionou", "infeccao", "drenando",
+  // inglês / espanhol
+  "swollen", "swelling", "redness", "pus", "discharge", "infected", "infection",
+  "hinchado", "hinchada", "enrojecimiento", "infeccion",
 ];
 const POS_OP_CONTEXTO = ["pos operatorio", "pos-operatorio", "pos op", "cirurgia", "operei", "lipo", "abdominoplastia", "protese"];
 
@@ -64,9 +85,15 @@ const CLINICO = [
   "flacidez ou gordura", "e gordura ou", "e flacidez ou", "qual e o meu caso",
   "o que eu tenho", "serve pro meu caso", "resolve o meu problema",
   "posso fazer mesmo tendo", "tenho contraindicacao", "contraindicacao",
-  "posso fazer gravida", "estou gravida", "amamentando",
-  "tomo anticoagulante", "tenho trombose", "tenho diabetes", "tenho cancer",
   "quantas sessoes eu preciso", "vai resolver", "diagnostico",
+  // Condições que mudam a conduta. Antes só a frase exata "posso fazer gravida" casava, então
+  // "to esperando bebe, pode fazer massagem?" passava como lead comercial. Agora é a CONDIÇÃO
+  // que dispara, escrita de qualquer jeito.
+  "gravida", "gravidez", "gestante", "esperando bebe", "esperando nene", "esperando um bebe",
+  "amamentando", "amamentacao", "pregnant", "embarazada",
+  "anticoagulante", "trombose", "diabetes", "cancer", "quimioterapia", "marcapasso",
+  "hipertensa", "pressao alta", "alergia", "alergica", "epilepsia", "lupus",
+  "menor de idade", "tenho 16 anos", "tenho 17 anos", "minha filha de",
 ];
 
 const MISTA_FLACIDEZ_GORDURA = {
@@ -90,11 +117,26 @@ const PACOTE_AUTORIZADO = ["pacote", "10 sessoes", "dez sessoes"];
 const CANCELAMENTO = [
   "cancelar", "desmarcar", "nao vou poder", "nao consigo ir", "nao vou conseguir",
   "preciso remarcar", "remarcar", "mudar meu horario", "adiar", "transferir meu horario",
+  // Formas de desmarcar que não usam a palavra "cancelar" — "amanhã não vou dar, desculpa".
+  "nao vou dar", "nao vai dar", "nao da pra ir", "nao dá pra ir", "nao posso ir",
+  "nao poderei", "nao vou aparecer", "nao consigo mais", "nao deu pra ir", "nao vou hoje",
+  "cancel", "reschedule", "cancelar mi cita",
 ];
 
 const ATRASO = ["atrasada", "atrasado", "vou chegar tarde", "estou a caminho mas", "vou me atrasar", "atraso"];
 
-const ENCAIXE = ["encaixe", "encaixar", "tem vaga", "abriu vaga", "lista de espera", "espera", "da pra hoje", "consegue hoje", "tem hoje"];
+// "espera" solto saía do ar: casava dentro de "esperando bebê" e transformava gestante em lead.
+const ENCAIXE = ["encaixe", "encaixar", "tem vaga", "abriu vaga", "lista de espera", "da pra hoje", "consegue hoje", "tem hoje"];
+
+/**
+ * Negação que inverte a intenção de agendar. Sem isto, "amanhã não vou dar" casava "amanha"
+ * em PEDIDO_HORARIO e a Emily respondia "que bom que você quer marcar" para quem estava
+ * desmarcando — o pior tipo de erro, porque é simpático e está lendo a pessoa ao contrário.
+ */
+const NEGACAO_DE_AGENDAMENTO = [
+  "nao vou", "nao posso", "nao da", "nao dá", "nao consigo", "nao vai dar", "nao deu",
+  "nao poderei", "nao quero mais", "nao rola", "can't", "cant make", "won't be able",
+];
 
 const PEDIDO_HORARIO = [
   "que horas", "tem horario", "qual horario", "tem disponibilidade", "disponivel",
@@ -188,10 +230,15 @@ const CORPO = {
   escalar_pos_op: "isso aí a Andreia precisa ver com você, e ela vai querer saber agora. Já estou passando pra ela.",
   escalar_pessoal: "claro, já estou chamando a Andreia pra falar com você.",
   escalar_desconto: "sobre valor quem fala é a Andreia mesmo. Já passei pra ela.",
-  escalar_cancelamento: "entendi. Vou falar com a Andreia sobre esse horário e já te retorno com a resposta dela.",
+  // Os corpos terminam ANTES do "já te aviso": esse pedaço vem do fecho, conforme a relação.
+  // Dizer as duas coisas ("já te retorno com a resposta dela. Já te falo.") soa a mensagem
+  // automática mal montada — foi o que a auditoria pegou na tela.
+  escalar_cancelamento: "entendi. Vou falar com a Andreia sobre esse horário.",
   escalar_atraso: "já avisei a Andreia que você tá a caminho.",
-  escalar_encaixe_conflito: "esse horário já tá com outra cliente, então não consigo confirmar por aqui. Vou perguntar pra Andreia se dá pra encaixar e te aviso.",
-  escalar_horario_pendente: "que bom que você quer marcar 💆🏼‍♀️ Vou confirmar com a Andreia e já te trago as opções.",
+  // "já tá ocupado", e não "já tá com outra cliente": a agenda de uma cliente não é assunto de
+  // outra. Confirmar que existe alguém naquele horário já é contar mais do que devia.
+  escalar_encaixe_conflito: "esse horário já tá ocupado, então não consigo confirmar por aqui. Vou perguntar pra Andreia se dá pra encaixar.",
+  escalar_horario_pendente: "que bom que você quer marcar 💆🏼‍♀️ Vou confirmar os horários com a Andreia.",
   escalar_sinal: "sobre isso quem confirma é a Andreia. Já passei pra ela.",
   escalar_idioma: "vou chamar a Andreia pra te responder direitinho.",
   escalar_padrao: "vou confirmar isso com a Andreia e já te respondo.",
@@ -261,9 +308,78 @@ export function ehUrgencia(msg) {
   return contem(msg, URGENCIA);
 }
 
+/** Há sinal corporal preocupante na mensagem? (independe de sabermos se ela é pós-operatório) */
+export function temSinalCorporal(msg) {
+  return contem(msg, POS_OP_SINAL);
+}
+
+/**
+ * É intercorrência de pós-op? Exige sinal + contexto de pós-op — que pode vir da mensagem, do
+ * histórico da cliente OU do serviço que ela faz. Antes só olhava `contexto.pos_operatorio`,
+ * um campo que nada no sistema preenchia: a regra mais grave era a mais difícil de disparar,
+ * num negócio em que pós-operatório é o serviço de US$ 100.
+ */
 export function ehIntercorrenciaPosOp(msg, contexto = {}) {
-  if (!contem(msg, POS_OP_SINAL)) return false;
-  return contem(msg, POS_OP_CONTEXTO) || Boolean(contexto.pos_operatorio);
+  if (!temSinalCorporal(msg)) return false;
+  const servicoEhPosOp = contem(contexto.servico || "", ["pos-operatorio", "pos operatorio", "pos op"]);
+  return contem(msg, POS_OP_CONTEXTO) || Boolean(contexto.pos_operatorio) || servicoEhPosOp;
+}
+
+// ---------------------------------------------------------------- idioma
+// A configuração dela manda: "responder no idioma em que a cliente escreveu; se não der para
+// identificar, escalar em vez de escolher". Isso estava escrito na config e não existia no código.
+// Detector deliberadamente simples e conservador: só afirma "é português" quando tem prova.
+// Marcadores DISTINTIVOS. Duas disciplinas aprendidas na marra:
+//   1. casamento por palavra inteira (senão "esperando" conta como o inglês "and");
+//   2. nada de palavra que exista nos dois idiomas — "for", "para", "por favor" e "no" são
+//      armadilhas: "sim, se for de manhã" era classificado como inglês por causa de "for".
+const MARCADORES = {
+  pt: ["nao", "voce", "vc", "obrigada", "obrigado", "ola", "bom dia", "boa tarde", "boa noite",
+    "quero", "posso", "preciso", "horario", "amanha", "hoje", "meu", "minha", "pra", "pro",
+    "tudo bem", "sim", "que", "uma", "muito", "estou", "tenho", "fazer", "dia", "voces",
+    "esta", "sao", "entao", "tambem", "ja", "aqui", "isso", "seu", "sua", "ele", "ela"],
+  en: ["the", "you", "your", "i'm", "im", "could", "please", "thanks", "thank",
+    "appointment", "tomorrow", "today", "how much", "my", "with", "what", "when",
+    "there", "it's", "its", "am", "is", "are", "do", "does", "can", "will", "would"],
+  es: ["gracias", "usted", "manana", "hoy", "quiero", "necesito", "cita", "cuanto", "puedo",
+    "buenos dias", "buenas tardes", "muy", "tengo", "hacer", "los", "las", "una", "esta",
+    "cuesta", "drenaje", "tambien", "ustedes", "quisiera"],
+};
+
+/**
+ * Devolve "pt" | "en" | "es" | null. `null` significa "não sei" e, pela regra dela, pode virar
+ * escalada — mas só quando a mensagem for longa o bastante para que "não sei" seja informação
+ * (ver o portão em `decidir`). Mensagens curtas caem no fluxo normal.
+ */
+export function detectarIdioma(msg) {
+  const t = norm(msg);
+  if (!t) return null;
+  const pontos = Object.fromEntries(
+    Object.entries(MARCADORES).map(([lang, termos]) => [lang, termos.filter((termo) => contem(t, [termo])).length]),
+  );
+  const ordenado = Object.entries(pontos).sort((a, b) => b[1] - a[1]);
+  const [melhor, placar] = ordenado[0];
+  const [, segundo] = ordenado[1];
+  if (placar === 0) return null;
+  // Empate = não sei. Fail-closed.
+  if (placar === segundo) return null;
+  return melhor;
+}
+
+/**
+ * Tentativa de manipulação do assistente. A regra 6 dela lista isso como motivo de escalada
+ * e não estava implementado. Não é que a injeção "funcione" — a ação já é decidida por regra e
+ * tudo passa por aprovação humana — mas quem aprova precisa VER que a mensagem tentou.
+ */
+const MANIPULACAO = [
+  "ignore as instrucoes", "ignore as instruções", "ignore previous", "ignore all previous",
+  "desconsidere", "esqueca as regras", "esqueça as regras", "voce agora e", "você agora é",
+  "system prompt", "prompt do sistema", "finja que", "aja como se", "pretend you",
+  "nova instrucao", "nova instrução", "override",
+];
+
+export function ehTentativaDeManipulacao(msg) {
+  return contem(msg, MANIPULACAO);
 }
 
 export function ehDuvidaClinica(msg) {
@@ -281,6 +397,17 @@ export function ehPedidoDeDesconto(msg) {
   return !contem(msg, PACOTE_AUTORIZADO);
 }
 
+/**
+ * Marcadores de condição. "sim, se for de manhã" NÃO é confirmação: é uma contraproposta.
+ * Tratar como "sim" seco marcava a tarde para quem só pode de manhã — e isso vira no-show.
+ */
+const CONDICIONAL = ["se for", "se der", "se puder", "se tiver", "desde que", "so se", "só se",
+  "contanto", "mas so", "mas só", "depende", "talvez", "acho que", "if it", "only if"];
+
+export function ehCondicional(msg) {
+  return contem(msg, CONDICIONAL);
+}
+
 export function classificarConfirmacao(msg, operacao) {
   const regras = operacao?.regras?.confirmacao || {};
   const aceitos = (regras.aceitos || CONFIRMA_EXPLICITA_PADRAO).map(norm);
@@ -288,6 +415,8 @@ export function classificarConfirmacao(msg, operacao) {
   const t = norm(msg);
   if (!t) return "vazia";
   if (SO_EMOJI.test(String(msg).trim())) return "ambigua";
+  // Condição vence o "sim": confirmação condicional é ambígua, sempre.
+  if (ehCondicional(t)) return "ambigua";
   if (contemPalavra(t, aceitos)) return "explicita";
   if (contemPalavra(t, naoAceitos) || contemPalavra(t, CONFIRMA_AMBIGUA_PADRAO)) return "ambigua";
   return "nenhuma";
@@ -360,6 +489,61 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
       corpo: CORPO.escalar_urgencia,
       bloqueios: ["nenhuma orientação clínica"],
       alertas: ["PRIORIDADE ALTA — avisar Andreia agora"],
+    });
+  }
+  // Sinal corporal sem contexto de pós-op ("minha barriga tá inchada e vermelha desde ontem").
+  // Antes isto caía no default silencioso. Sinal no corpo de alguém nunca é caso de "não sei":
+  // é escalada com prioridade, mesmo que a gente não saiba se ela operou.
+  if (temSinalCorporal(texto)) {
+    return resultado({
+      ...base,
+      acao: "escalar",
+      regra: "R6.SINAL_CLINICO",
+      motivo: "Relato de sinal no corpo (inchaço, vermelhidão, secreção) sem contexto conhecido. Escala com prioridade — a Emily não classifica gravidade.",
+      corpo: CORPO.escalar_pos_op,
+      bloqueios: ["nenhuma orientação clínica", "nenhuma remarcação automática"],
+      alertas: ["PRIORIDADE ALTA — avisar Andreia agora"],
+    });
+  }
+
+  // ---- 2b. PORTÃO DE IDIOMA. A config dela manda responder no idioma da cliente e escalar
+  // quando não der para identificar. Os detectores comerciais abaixo são só em português, então
+  // deixar uma mensagem em inglês seguir adiante produziria resposta em português para o caso
+  // errado — foi assim que "I have diabetes, can I do the massage? how much is it?" recebia a
+  // tabela de preços. Vem DEPOIS da urgência de propósito: segurança antes de idioma.
+  {
+    const idioma = ctx.idioma || detectarIdioma(texto);
+    // Escala por idioma SOMENTE com detecção positiva de outro idioma. "Não sei" não é prova de
+    // idioma estrangeiro: a primeira versão escalava por ausência de sinal e mandava "quanto custa
+    // a drenagem?" para a Andreia. Quem cobre o texto indecifrável é o default fail-closed lá
+    // embaixo, que também escala — só que pelo motivo certo.
+    // `idioma_identificado: false` continua sendo um override explícito de quem chama.
+    const forcado = ctx.idioma_identificado === false;
+    if (forcado || (idioma && idioma !== "pt")) {
+      return resultado({
+        ...base,
+        acao: "escalar",
+        regra: "IDIOMA.NAO_IDENTIFICADO",
+        motivo: idioma
+          ? `Mensagem parece estar em "${idioma}". A Emily só tem regras validadas em português — quem responde é a Andreia.`
+          : "Não foi possível identificar o idioma com segurança. A regra manda escalar em vez de escolher.",
+        corpo: CORPO.escalar_idioma,
+        bloqueios: ["não responder em idioma sem regras validadas", "não traduzir preço nem regra por conta própria"],
+      });
+    }
+  }
+
+  // ---- 2c. tentativa de manipulação (regra 6). Precede as regras comerciais: uma mensagem que
+  // tenta reprogramar a assistente não é atendida, é mostrada para o humano.
+  if (ehTentativaDeManipulacao(texto)) {
+    return resultado({
+      ...base,
+      acao: "escalar",
+      regra: "R6.TENTATIVA_MANIPULACAO",
+      motivo: "A mensagem contém instrução dirigida ao assistente (tentativa de manipulação). Escalada para revisão humana; nada é executado a partir do texto da cliente.",
+      corpo: CORPO.escalar_padrao,
+      bloqueios: ["não seguir instrução vinda da mensagem", "não confirmar horário a partir deste texto"],
+      alertas: ["Possível tentativa de manipulação — leia a mensagem inteira antes de aprovar"],
     });
   }
 
@@ -507,7 +691,9 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
   }
 
   // ---- 10. encaixe / horário: conflito bloqueia antes de qualquer oferta (regra 2)
-  const pedeHorario = contem(texto, PEDIDO_HORARIO) || contem(texto, ENCAIXE);
+  // A negação vem antes de tudo: citar um dia da semana numa frase negativa NÃO é pedir horário.
+  const pedeHorario = !contem(texto, NEGACAO_DE_AGENDAMENTO)
+    && (contem(texto, PEDIDO_HORARIO) || contem(texto, ENCAIXE));
   if (pedeHorario && ctx.horario_alvo) {
     const conflitos = conflitosEm({
       inicio: ctx.horario_alvo,

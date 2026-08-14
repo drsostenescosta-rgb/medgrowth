@@ -12,14 +12,25 @@
 // O que NUNCA entra aqui: nada que o scanner de PII reprove enquanto o preflight estiver
 // reprovado. O gate é aplicado na escrita, não na leitura — dado errado não chega a existir.
 
-import { appendFileSync, existsSync, readFileSync, mkdirSync } from "node:fs";
-import { createHash, randomUUID } from "node:crypto";
+import { appendFileSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exigirSomenteSintetico } from "./redaction.mjs";
+import { exigirSomenteSintetico, validarAliasSintetico } from "./redaction.mjs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 export const ARQ_LEDGER = join(ROOT, "aprovacoes.jsonl");
+/**
+ * Âncora externa: guarda `{total, ultimo_hash}` FORA do arquivo de eventos.
+ *
+ * Por que existe (auditoria do Sheldon Pai, 14/08): a cadeia de hash sozinha detecta edição de
+ * uma linha do meio, mas NÃO detecta truncamento nem reescrita completa — bastava recalcular a
+ * cadeia inteira e `verificar` dizia "ÍNTEGRA". A âncora obriga o adulterador a editar dois
+ * arquivos de forma consistente. Continua NÃO sendo à prova de quem tem acesso ao disco, e isso
+ * está dito com todas as letras no kit de operação: o que ela dá é detecção de acidente,
+ * truncamento e edição descuidada — não prova criptográfica contra um atacante local.
+ */
+export const ARQ_ANCORA = join(ROOT, ".aprovacoes-ancora.json");
 export const GENESIS = "0".repeat(64);
 
 export const TIPOS_EVENTO = Object.freeze(["proposta_criada", "decisao_humana", "acao_agenda", "nota_operacional"]);
@@ -70,6 +81,25 @@ export function lerTudo(arquivo = ARQ_LEDGER) {
  * Revalida a cadeia inteira. Devolve { ok, total, quebras: [{seq, esperado, encontrado}] }.
  * É isto que transforma o ledger em prova, e não em log.
  */
+function caminhoAncora(arquivo) {
+  return arquivo === ARQ_LEDGER ? ARQ_ANCORA : `${arquivo}.ancora.json`;
+}
+
+export function lerAncora(arquivo = ARQ_LEDGER) {
+  try {
+    return JSON.parse(readFileSync(caminhoAncora(arquivo), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function gravarAncora(arquivo, total, ultimoHash) {
+  writeFileSync(
+    caminhoAncora(arquivo),
+    JSON.stringify({ total, ultimo_hash: ultimoHash, atualizado_em: new Date().toISOString() }, null, 2),
+  );
+}
+
 export function verificarCadeia(arquivo = ARQ_LEDGER) {
   const eventos = lerTudo(arquivo);
   const quebras = [];
@@ -87,7 +117,24 @@ export function verificarCadeia(arquivo = ARQ_LEDGER) {
     }
     anterior = ev.hash;
   });
-  return { ok: quebras.length === 0, total: eventos.length, quebras, ultimo_hash: anterior };
+
+  // Confronto com a âncora externa: é o que pega truncamento e reescrita completa.
+  const ancora = lerAncora(arquivo);
+  if (ancora) {
+    if (eventos.length < ancora.total) {
+      quebras.push({ seq: eventos.length, campo: "ancora.total", esperado: ancora.total, encontrado: eventos.length, nota: "eventos DESAPARECERAM do arquivo" });
+    } else if (eventos.length === ancora.total && anterior !== ancora.ultimo_hash) {
+      quebras.push({ seq: eventos.length, campo: "ancora.ultimo_hash", esperado: ancora.ultimo_hash, encontrado: anterior, nota: "arquivo foi reescrito inteiro" });
+    }
+  }
+
+  return {
+    ok: quebras.length === 0,
+    total: eventos.length,
+    quebras,
+    ultimo_hash: anterior,
+    ancora: ancora ? { presente: true, total: ancora.total, atualizado_em: ancora.atualizado_em } : { presente: false },
+  };
 }
 
 function ultimoHash(arquivo) {
@@ -116,21 +163,32 @@ export function registrar({ tipo, payload, modoSintetico = true, arquivo = ARQ_L
   };
   mkdirSync(dirname(arquivo), { recursive: true });
   appendFileSync(arquivo, `${JSON.stringify(evento)}\n`);
+  gravarAncora(arquivo, eventos.length + 1, evento.hash);
   return evento;
 }
 
 // ---------------------------------------------------------------- operações de alto nível
 /**
- * ID da proposta SEM hífens e com prefixo. Motivo real, descoberto em teste: um UUID normal
- * ("...-1234-5678-...") casa com o detector de telefone do redaction.mjs e faz o próprio ledger
- * reprovar a gravação. A escolha aqui é adaptar o ID, não afrouxar o scanner de PII — um scanner
- * agressivo demais custa um prefixo; um scanner frouxo custa dado de paciente vazando.
+ * ID da proposta com LETRAS APENAS. Motivo real, descoberto em teste: identificadores com dígitos
+ * casam com os detectores de telefone do redaction.mjs (um UUID tem `1234-5678`; uma sequência hex
+ * pode ter 10 dígitos seguidos) e fazem o próprio ledger reprovar a gravação por PII inexistente.
+ * A escolha é adaptar o ID, não afrouxar o scanner: um scanner agressivo custa um alfabeto;
+ * um scanner frouxo custa dado de paciente.
+ * 16 letras = 26^16 ≈ 4×10^22 combinações. Colisão não é preocupação aqui.
  */
 export function novoId() {
-  return `p${randomUUID().replace(/-/g, "")}`;
+  return Array.from(randomBytes(16), (b) => String.fromCharCode(97 + (b % 26))).join("");
 }
 
 export function novaProposta({ canal, alias, mensagem, decisao_motor, contexto = {}, modoSintetico = true, arquivo = ARQ_LEDGER }) {
+  // Em modo sintético o identificador da pessoa tem de ser um alias artificial estrito. Sem isto,
+  // "Larissa Mendes" entraria no ledger sem o scanner piscar — ele reconhece formatos, não nomes.
+  if (modoSintetico && !validarAliasSintetico(alias)) {
+    throw new Error(
+      `alias "${alias}" recusado: em modo sintético use exatamente "Cliente Demo NN" ou "Paciente Demo NN". ` +
+        "O scanner de PII não sabe reconhecer nome de pessoa — o formato do alias é a barreira.",
+    );
+  }
   const id = novoId();
   registrar({
     tipo: "proposta_criada",

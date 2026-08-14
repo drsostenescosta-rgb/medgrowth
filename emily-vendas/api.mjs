@@ -100,8 +100,39 @@ export function calcularGate(cfg) {
 
 // ---------------------------------------------------------------- polimento opcional pelo LLM
 /**
- * O LLM NÃO decide — ele só reescreve o rascunho no tom certo. Se a chave estiver inválida
- * (é o caso hoje: 401) devolve o texto da regra intacto e diz que não poliu. A operação não para.
+ * Valida a reescrita do LLM antes de deixá-la virar o texto que vai para a cliente.
+ *
+ * "Se ele alucinar, a ação já estava decidida" é verdade e é insuficiente: a cliente lê as
+ * PALAVRAS, não a ação. Um polimento que invente um horário, um preço ou uma promessa de
+ * resultado causa dano mesmo com a ação certa. Então o polido só passa se não introduzir:
+ *   - número que não existia no rascunho (horário, preço, quantidade de sessões);
+ *   - símbolo de moeda novo;
+ *   - promessa de resultado.
+ * Falhou qualquer checagem → fica o texto da regra. Silenciosamente seguro, com motivo registrado.
+ */
+const PROMESSA = /\b(garant|assegur|com certeza vai|resultado garantido|vai resolver|fica perfeit|elimina de vez)/i;
+
+export function validarPolimento(original, polido) {
+  const numeros = (s) => (String(s).match(/\d+/g) || []).join(",");
+  if (numeros(polido) !== numeros(original)) {
+    return { ok: false, motivo: "polimento introduziu ou alterou números (horário, preço ou quantidade)" };
+  }
+  if (/[$€£]/.test(polido) && !/[$€£]/.test(original)) {
+    return { ok: false, motivo: "polimento introduziu valor monetário que não estava no rascunho" };
+  }
+  if (PROMESSA.test(polido) && !PROMESSA.test(original)) {
+    return { ok: false, motivo: "polimento introduziu promessa de resultado" };
+  }
+  if (polido.length > original.length * 2.5) {
+    return { ok: false, motivo: "polimento ficou desproporcionalmente longo — provável alucinação" };
+  }
+  return { ok: true };
+}
+
+/**
+ * O LLM NÃO decide — ele só reescreve o rascunho no tom certo, e a reescrita passa por
+ * `validarPolimento`. Se a chave estiver inválida (é o caso hoje: 401) devolve o texto da regra
+ * intacto e diz que não poliu. A operação não para.
  */
 export async function polirTexto({ texto, decisao, cfg }) {
   if (!process.env.ANTHROPIC_API_KEY) return { texto, polido: false, motivo: "ANTHROPIC_API_KEY ausente" };
@@ -124,7 +155,11 @@ export async function polirTexto({ texto, decisao, cfg }) {
       maxTokens: 300,
     });
     const limpo = String(saida || "").trim();
-    return limpo ? { texto: limpo, polido: true } : { texto, polido: false, motivo: "resposta vazia" };
+    if (!limpo) return { texto, polido: false, motivo: "resposta vazia" };
+    const v = validarPolimento(texto, limpo);
+    // Reescrita reprovada não vira rascunho: fica o texto da regra e o motivo aparece no painel.
+    if (!v.ok) return { texto, polido: false, motivo: `polimento REJEITADO — ${v.motivo}` };
+    return { texto: limpo, polido: true };
   } catch (e) {
     return { texto, polido: false, motivo: e.message.slice(0, 200) };
   }
@@ -230,6 +265,10 @@ export function criarHandler({ agendaMarcar = null } = {}) {
           mensagem,
           operacao: cfg.operacao || {},
           agenda: cfg.agenda || {},
+          // `clinica` fornece os apelidos de serviço e alimenta a repergunta. Faltava aqui: os
+          // cenários passavam e o único caminho real (a ponte) não — o ponto de extensão
+          // documentado estava morto em produção.
+          clinica: cfg.clinica || {},
           contexto: { ...contexto, ocupacoes: contexto.ocupacoes || oc.ocupacoes },
           gate,
         });

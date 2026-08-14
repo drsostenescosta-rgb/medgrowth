@@ -111,7 +111,7 @@
         "regra": "R2.CONFLITO",
         "acao_agenda_tipo": "bloqueada_por_conflito",
         "relacao": "de_casa",
-        "nao_pode_conter": ["remarco a outra", "vou mover", "consigo sim", "encaixei", "aqui é a emily"],
+        "nao_pode_conter": ["remarco a outra", "vou mover", "consigo sim", "encaixei", "aqui é a emily", "outra cliente"],
         "invariantes": ["não mover outra cliente", "não criar dupla marcação", "encaixe só com decisão da Andreia"]
       }
     }
