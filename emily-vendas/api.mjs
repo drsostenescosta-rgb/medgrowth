@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 
 import { avaliarPreflight } from "./preflight.mjs";
+import { proximosLivres } from "./interpretar-horarios.mjs";
 import { decidir } from "./regras.mjs";
 import { fila, historico, novaProposta, registrarDecisao, registrarAcaoAgenda, estatisticas, verificarCadeia } from "./ledger.mjs";
 import { assinaturaValida, configAgendor, gravarEspelho, lerCompromissos, lerEspelho } from "./agendor.mjs";
@@ -313,6 +314,13 @@ export function criarHandler({ agendaMarcar = null } = {}) {
         if (!alias || !mensagem) return json(res, 400, { erro: "alias e mensagem são obrigatórios" });
 
         const oc = await ocupacoesAtuais();
+        // Horários vindos da grade REAL dela. `confiavel` só é true com o espelho do Agendor
+        // fresco — senão a Emily propõe, mas o painel manda conferir antes de aprovar.
+        const confiavel = oc.fonte === "agendor_espelho";
+        const livres = gate.grade_definida
+          ? proximosLivres({ agenda: cfg.agenda || {}, ocupacoes: oc.ocupacoes, limite: 3, confiavel })
+          : { horarios: [], confiavel: false, fonte: "grade pendente" };
+
         const decisao = decidir({
           mensagem,
           operacao: cfg.operacao || {},
@@ -321,7 +329,12 @@ export function criarHandler({ agendaMarcar = null } = {}) {
           // cenários passavam e o único caminho real (a ponte) não — o ponto de extensão
           // documentado estava morto em produção.
           clinica: cfg.clinica || {},
-          contexto: { ...contexto, ocupacoes: contexto.ocupacoes || oc.ocupacoes },
+          contexto: {
+            ...contexto,
+            ocupacoes: contexto.ocupacoes || oc.ocupacoes,
+            horarios_livres: contexto.horarios_livres || livres.horarios,
+            ocupacoes_confiaveis: confiavel,
+          },
           gate,
         });
 
@@ -329,7 +342,7 @@ export function criarHandler({ agendaMarcar = null } = {}) {
         decisao.resposta_sugerida = polimento.texto;
         decisao.texto_polido_por_llm = polimento.polido;
         if (!polimento.polido) decisao.motivo_sem_polimento = polimento.motivo;
-        decisao.origem_ocupacoes = { fonte: oc.fonte, motivo: oc.motivo, frescor_min: oc.frescor_min };
+        decisao.origem_ocupacoes = { fonte: oc.fonte, motivo: oc.motivo, frescor_min: oc.frescor_min, horarios_de: livres.fonte };
 
         const id = novaProposta({
           canal,

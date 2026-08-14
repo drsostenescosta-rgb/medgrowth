@@ -829,14 +829,25 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
     }
     const opcoes = (ctx.horarios_livres || []).slice(0, 3);
     const lista = opcoes.map((h) => rotuloQuando(h, { fuso, agora })).join(" ou ");
+    // Enquanto o espelho do Agendor estiver desligado, estes horários vêm da GRADE dela, não da
+    // AGENDA dela: são horários em que ela costuma atender, não horários que sabemos estar livres.
+    // Oferecer sem ter lido a agenda é apostar, e a aposta aqui custa duas clientes no mesmo
+    // horário. Então a Emily propõe (que é o valor do piloto) e quem aprova é avisado de conferir.
+    const cega = ctx.ocupacoes_confiaveis !== true;
     return resultado({
       ...base,
       acao: "responder",
       regra: "AGENDA.PROPOR_HORARIO",
-      motivo: "Pedido de horário com grade confirmada. Propor horários livres reais para aprovação.",
+      motivo: cega
+        ? "Pedido de horário com grade confirmada, mas SEM leitura da agenda real (espelho do Agendor desligado). Os horários vêm da grade — confira no Agendor antes de aprovar."
+        : "Pedido de horário com grade confirmada e agenda lida. Horários livres reais.",
       corpo: lista ? `tenho ${lista}. Qual fica melhor pra você?` : CORPO.escalar_horario_pendente,
-      acao_agenda: { tipo: "propor_horario", opcoes },
-      bloqueios: ["todos os serviços exigem avaliação prévia — agendar a AVALIAÇÃO, não o procedimento"],
+      acao_agenda: { tipo: "propor_horario", opcoes, fonte: cega ? "grade" : "agendor" },
+      bloqueios: [
+        "todos os serviços exigem avaliação prévia — agendar a AVALIAÇÃO, não o procedimento",
+        ...(cega ? ["conferir no Agendor antes de aprovar — a agenda real não foi lida"] : []),
+      ],
+      alertas: cega ? ["Horários vêm da grade, não da agenda — CONFIRA no Agendor antes de aprovar"] : [],
     });
   }
 
