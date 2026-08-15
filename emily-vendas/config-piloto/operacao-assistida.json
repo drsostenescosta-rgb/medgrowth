@@ -1,0 +1,196 @@
+{
+  "_fonte": "Questionario secoes 3-9, respondido por Andreia em 11/08/2026, + regras invioláveis da entrevista.",
+  "_aviso": "Campos com [PREENCHER sao PENDENTE-CONFIRMAR. O preflight falha de proposito ate serem respondidos.",
+  "modo": "assistido",
+  "responsavel_escalacao": "Andreia Carvalho",
+  "revisao_humana_obrigatoria": true,
+  "automacao": {
+    "envio_automatico": false
+  },
+  "canal_escalacao": {
+    "destino": "WhatsApp pessoal da Andreia (numero NAO versionado — fica fora do git)",
+    "prazo_alvo": "sem prazo declarado por Andreia; a Emily nunca decide sozinha enquanto espera"
+  },
+  "escalonamento": {
+    "topicos": [
+      "clinico",
+      "urgencia",
+      "pessoal",
+      "preco_nao_autorizado",
+      "intercorrencia_pos_operatorio",
+      "cancelamento_tardio_sexta_sabado",
+      "atraso_10min",
+      "duvida_sem_resposta_aprovada",
+      "divergencia_agenda"
+    ],
+    "quando_nao_sabe": "Dizer que vai confirmar com a Andreia, registrar a duvida e NAO inventar resposta nem prazo (resposta 5.5)."
+  },
+  "shadow_sintetico": {
+    "habilitado": true,
+    "revisor_humano": "Sostenes",
+    "simulacoes": [
+      "novo_pedido",
+      "conflito",
+      "confirmacao_ambigua",
+      "cancelamento",
+      "escalacao_clinica"
+    ]
+  },
+  "regras": {
+    "confirmacao": {
+      "exige_confirmacao_explicita": true,
+      "reconfirma_termos_ambiguos": true,
+      "aceitos": [
+        "sim",
+        "confirmo",
+        "confirmado",
+        "sim, confirmo"
+      ],
+      "nao_aceitos": [
+        "ta bom",
+        "tá bom",
+        "ok",
+        "blz",
+        "👍",
+        "emoji sozinho",
+        "silencio"
+      ],
+      "_nota_acentuacao": "Os dois textos abaixo saem para a CLIENTE. Foram gravados sem acento na primeira transcricao (14/08) e tiveram os acentos RESTAURADOS em 14/08. Restaurar acento nao e inventar conteudo — e mandar portugues sem acento para a cliente parece desleixo. A estrutura das frases da Andreia nao foi alterada. As tres respostas-modelo no tom dela (pendencia 6.5) continuam PENDENTES.",
+      "mensagem_vespera": "Oi, [nome]! Tudo bem? Passando para confirmar seu horário amanhã, às [hora], para [servico]. Você confirma que estará presente? 🙋‍♀️",
+      "repergunta_padrao": "Só para confirmar direitinho: posso considerar confirmado seu horário de [servico], amanhã às [hora]? Responde sim ou não, por favor 😘"
+    },
+    "cancelamento": {
+      "nao_remove_sem_confirmacao_explicita": true,
+      "revisao_humana_obrigatoria": true,
+      "antecedencia_minima_horas": 24,
+      "regra_sexta_sabado": "Cancelamento com menos de 24h em sexta ou sabado: falar com Andreia ANTES de remarcar (resposta 4.5).",
+      "oferta_de_alternativas": "A Emily pode mostrar outros horarios disponiveis, mas mantem o horario atual ate a cliente confirmar claramente a troca (resposta 4.7)."
+    },
+    "atraso": {
+      "minutos_para_avisar_andreia": 10,
+      "regra": "Com 10 minutos de atraso, avisar Andreia. A Emily nao decide remarcar nem liberar o horario."
+    },
+    "transparencia": {
+      "identifica_como_assistente": true,
+      "regra": "A Emily diz que e assistente da Andreia. Nunca finge ser a Andreia."
+    },
+    "comercial": {
+      "desconto_direto": false,
+      "bonus_aprovado": "Pacote de 10 sessoes: a cliente paga 9 (resposta 3.6).",
+      "regra": "Nenhum outro desconto, cortesia ou condicao pode ser oferecido sem falar com Andreia."
+    },
+    "conteudo_bloqueado": [
+      {
+        "alegacao": "EMSzero / EMS Zero / MS Zero queima ate 1.000 calorias",
+        "status": "BLOQUEADA",
+        "motivo": "Alegacao de resultado sem fonte tecnica verificavel (PRD RF-06). Vale para qualquer variacao: 'queima X calorias', 'equivale a N dias de exercicio', 'equivale a N abdominais'.",
+        "descricao_aprovada": "O EMSzero e uma maquina de tonificacao muscular que trabalha tres areas em uma sessao: abdomen, posterior e gluteos."
+      },
+      {
+        "alegacao": "qualquer promessa de resultado corporal, clinico ou de perda de peso",
+        "status": "BLOQUEADA",
+        "motivo": "A Emily descreve o procedimento; nao promete resultado."
+      }
+    ],
+    "conhecimento_aprovado": "A Emily so pode citar o nome do procedimento e a descricao aprovada por Andreia (resposta 3.4). Nada fora disso."
+  },
+  "servicos": [
+    {
+      "id": "drenagem-linfatica",
+      "nome_publico": "Drenagem linfática",
+      "nome_en": "Lymphatic drainage",
+      "preco_usd": 60,
+      "politica_operacional": {
+        "duracao_min": 50,
+        "buffer_min": 10,
+        "requer_confirmacao_explicita": true,
+        "escalar_se_duvida": true,
+        "exige_avaliacao_previa": true
+      }
+    },
+    {
+      "id": "pos-operatorio",
+      "nome_publico": "Pós-operatório",
+      "nome_en": "Post-operative care",
+      "preco_usd": 100,
+      "politica_operacional": {
+        "duracao_min": 80,
+        "buffer_min": 10,
+        "requer_confirmacao_explicita": true,
+        "escalar_se_duvida": true,
+        "exige_avaliacao_previa": true
+      }
+    },
+    {
+      "id": "massoterapia-masculina",
+      "nome_publico": "Massoterapia masculina",
+      "nome_en": "Men's massage therapy",
+      "preco_usd": 70,
+      "politica_operacional": {
+        "duracao_min": 50,
+        "buffer_min": 10,
+        "requer_confirmacao_explicita": true,
+        "escalar_se_duvida": true,
+        "exige_avaliacao_previa": true
+      }
+    }
+  ],
+  "sinal_e_lista_de_espera": {
+    "status": "DECIDIDO",
+    "decidido_por": "Sostenes",
+    "data": "2026-08-14",
+    "resposta_4_6_original": "Andreia disse que queria lista de espera e, se possivel, um sinal.",
+    "lista_de_espera": {
+      "existe": false,
+      "no_lugar_dela": "remanejo caso a caso",
+      "regra": "Nao existe fila. Quando alguem quer um horario ocupado, a Andreia decide se vale perguntar a cliente daquele horario se ela topa mudar. A Emily coleta o horario desejado, nao promete fila nem aviso automatico, e nao fala com a outra cliente sem decisao da Andreia.",
+      "motor": "COM.SEM_LISTA_DE_ESPERA (resposta a quem pergunta) + mensagemRemanejo() (rascunho do pedido a cliente que tem o horario)."
+    },
+    "remanejo": {
+      "quem_decide": "Andreia",
+      "tom_exigido": "A cliente precisa sentir que nao esta sendo incomodada e que pode dizer nao sem constrangimento. A mensagem afirma primeiro que o horario dela esta garantido, oferece uma alternativa concreta, e termina dando permissao de recusar sem justificar.",
+      "invioalveis": [
+        "nunca dizer que outra cliente quer o horario",
+        "nunca criar urgencia ou pressionar",
+        "silencio nao e aceite; 'ta bom' nao e aceite",
+        "a agenda so muda depois de um sim explicito"
+      ]
+    },
+    "sinal": {
+      "existe": false,
+      "regra": "Nao ha politica de sinal. A Emily nunca menciona sinal e escala se a cliente perguntar. Silencio de Sostenes sobre sinal nao virou 'sim' nem valor inventado — virou comportamento definido: nao cobrar nada.",
+      "motor": "COM.SINAL_SEM_POLITICA"
+    }
+  },
+  "retencao_de_registros": {
+    "status": "DECIDIDO",
+    "decidido_por": "Sostenes",
+    "data": "2026-08-14",
+    "resposta_7_3_original": "Ainda vou decidir",
+    "prazo_dias": 90,
+    "contado_a_partir_de": "ultimo contato da cliente",
+    "finalidade": "Remarketing: se a cliente fez o primeiro contato e nao fechou, o registro fica 3 meses para uma nova tentativa. Passado o prazo, o registro e apagado.",
+    "o_que_fica": "Primeiro nome, servico de interesse, horario preferido, estagio no funil e data do ultimo contato.",
+    "o_que_nunca_fica": "Conteudo clinico, diagnostico, exame, pagamento, foto, documento.",
+    "opt_out": "Pedido de PARAR/SAIR apaga o registro antes do prazo e bloqueia novo contato — o prazo de 90 dias nao autoriza insistir em quem pediu para sair.",
+    "pendente_de_implementacao": "A purga automatica aos 90 dias ainda NAO existe em codigo. Enquanto nao existir, o piloto roda sem dado real ou com purga manual registrada no ledger."
+  },
+  "exemplos_para_avaliacao": {
+    "status": "PENDENTE-CONFIRMAR",
+    "resposta_9_1_9_2": "Andreia repetiu o texto da instrucao; nao entregou os exemplos.",
+    "regra": "[PREENCHER — PENDENTE-CONFIRMAR 9.1/9.2: 3 exemplos anonimizados que viraram agendamento e 3 que nao viraram, por canal seguro, sem nome, telefone, data ou dado clinico. Sao a base da suite de avaliacao do prompt.]"
+  },
+  "metricas_base": {
+    "mensagens_dia_normal": 15,
+    "mensagens_dia_cheio": 30,
+    "tempo_primeira_resposta_quando_livre_min": 10,
+    "faltas_sem_avisar_ultimas_4_semanas": 4,
+    "minutos_admin_por_dia": "90 a 120",
+    "sucesso_em_7_dias": [
+      "confirmar a agenda sem mensagem repetida",
+      "responder novos pedidos em ate 15 minutos",
+      "criar um plano piloto de divulgacao"
+    ]
+  },
+  "_gerado_por": "emily-vendas/scripts/sincronizar-config.mjs — copia para o deploy. NAO editar aqui; edite em clinic-now-piloto-familia/config."
+}

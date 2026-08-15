@@ -1,0 +1,82 @@
+{
+  "_fonte": "Questionario de lacunas respondido por Andreia em 11/08/2026 (Notion 3b911331-20fd-81d7-8bcb-fbd2f47b6b78) + entrevista 11/08/2026.",
+  "_aviso": "Campos com [PREENCHER sao PENDENTE-CONFIRMAR: o preflight falha de proposito ate Andreia responder. Nao inventar valor.",
+  "nome_clinica": "Andréia Carvalho Aesthetics",
+  "endereco_clinica": "54 Main Street, 1º piso, sala 001A",
+  "nome_humano_responsavel": "Andreia Carvalho",
+  "fuso_horario": "America/New_York",
+  "idiomas": {
+    "_correcao": "14/08/2026, informado por Sostenes: a Andreia FALA portugues e espanhol; NAO fala ingles — atende americanas com apoio de traducao. A versao anterior tratava os tres idiomas como equivalentes, o que fazia a Emily poder responder em ingles em nome de quem nao sustenta a conversa na sala.",
+    "fala": [
+      "pt",
+      "es"
+    ],
+    "atende_com_traducao": [
+      "en"
+    ],
+    "padrao": "idioma_da_cliente",
+    "regra": "Responder no idioma em que a cliente escreveu, entre os que a Andreia FALA (pt, es). Mensagem em ingles ESCALA: a Emily nao inicia em nome dela uma conversa que ela nao consegue continuar no atendimento. Se nao der para identificar o idioma, escalar tambem.",
+    "_nota_motor": "O motor de regras ja escala qualquer idioma que nao seja pt (IDIOMA.NAO_IDENTIFICADO), porque nao existem regras validadas em outro idioma. Espanhol so passa a ser respondido pela Emily quando houver as frases-modelo da Andreia em espanhol — hoje nem em portugues elas existem (pendencia 6.5)."
+  },
+  "canal_piloto": {
+    "fase_1": "WhatsApp atual da clinica (numero pessoal da Andreia) — modo assistido, sem envio automatico",
+    "fase_2_pendente_decisao_sostenes": "WhatsApp Business / WhatsApp Cloud API — nao decidido",
+    "instagram_e_sms": "segunda etapa (resposta 1.6)",
+    "_nota": "Numeros de telefone NUNCA entram neste repositorio."
+  },
+  "voz": {
+    "tamanho_mensagem": "curta",
+    "formalidade": "informal — proibido tom formal ou gessado",
+    "emojis_aprovados": [
+      "🙋‍♀️",
+      "💆🏼‍♀️",
+      "😘",
+      "✨",
+      "✅"
+    ],
+    "evitar": [
+      "Prezada cliente",
+      "venho por meio desta",
+      "conforme solicitado",
+      "mensagens longas",
+      "qualquer tom formal"
+    ],
+    "cliente_nova": "explicar mais, chamar pela primeira nome",
+    "cliente_recorrente": "mais direta e proxima, sem intimidade exagerada",
+    "respostas_modelo": {
+      "_origem": "Regra de venda definida por Sostenes em 14/08/2026. A Andreia respondeu apenas '3' a pergunta 6.5; o QUE dizer agora esta definido pelo dono do projeto, o COMO dizer segue rascunho nosso.",
+      "_status_do_texto": "RASCUNHO — aguardando a Andreia ler e ajustar as palavras. A politica abaixo ja e vinculante; a redacao nao. Nada e enviado sem ela aprovar no painel (Fase 1).",
+      "aprovado_pela_andreia": false,
+      "_como_aprovar": "Depois de a Andreia ler as tres frases e ajustar o que nao for a cara dela, trocar para true. E isso que faz o gate marcar tom_validado. Enquanto for false, o painel mostra que o tom ainda nao foi validado por ela.",
+      "preco": {
+        "regra": "NUNCA passar valor antes de entender o que a cliente precisa. Qualificar primeiro, precificar depois, e so o servico dela — nunca a tabela inteira.",
+        "porque": "Preco solto na primeira mensagem transforma a conversa em comparacao com a concorrente antes de a cliente entender o que ela mesma quer.",
+        "sem_saber_do_que_ela_precisa": "Me conta rapidinho o que você tá querendo melhorar? Assim eu já te falo certinho o que a Andreia indica pro seu caso e quanto fica 💆🏼‍♀️",
+        "com_servico_definido": "A drenagem fica US$ 60, sessão de 50 min. Antes a Andreia faz uma avaliação com você, pra ver se é mesmo o melhor pro seu caso. Quer que eu veja um horário? ✨",
+        "motor": "COM.PRECO_DESCOBERTA e COM.PRECO_SERVICO"
+      },
+      "horario": {
+        "regra": "Horario sai da agenda real, nunca da suposicao. Enquanto o espelho do Agendor estiver desligado, o painel avisa que os horarios vieram da grade e precisam ser conferidos.",
+        "texto": "Tenho quarta, 2 da tarde ou quinta, 5 da tarde. Qual fica melhor pra você? 🙋‍♀️",
+        "motor": "AGENDA.PROPOR_HORARIO"
+      },
+      "falar_com_a_andreia": {
+        "regra": "Qualquer coisa pessoal, clinica, de valor fora da tabela ou que a Emily nao saiba: escalar, sem inventar prazo.",
+        "texto": "Claro, já estou chamando a Andreia pra falar com você 😘",
+        "motor": "R8.NAO_SABE e as regras de escalada"
+      }
+    }
+  },
+  "dados_minimos_para_agendar": [
+    "primeiro nome e sobrenome",
+    "servico desejado",
+    "horario preferido",
+    "motivo/indicacao do servico (resposta 7.4)"
+  ],
+  "acesso_aos_registros": [
+    "Andreia Carvalho",
+    "Sostenes"
+  ],
+  "opt_out": "Se a pessoa escrever PARAR ou SAIR, interromper mensagens e registrar o pedido (resposta 7.6).",
+  "_gerado_por": "emily-vendas/scripts/sincronizar-config.mjs — copia para o deploy. NAO editar aqui; edite em clinic-now-piloto-familia/config."
+}

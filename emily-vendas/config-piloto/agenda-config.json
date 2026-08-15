@@ -1,0 +1,93 @@
+{
+  "_fonte": "Questionario secao 2, respondido por Andreia em 11/08/2026.",
+  "_interpretacao": {
+    "data": "2026-08-14",
+    "autorizado_por": "Sostenes",
+    "regra": "AM/PM de hora escrita por gente e resolvido por DEDUCAO, nao por palpite: as quatro leituras (AM/AM, AM/PM, PM/AM, PM/PM) sao testadas contra tres restricoes de realidade — fim depois do inicio, janela plausivel de clinica (06:00-22:00) e turno entre 2h e 14h. Se sobrar exatamente UMA leitura, ela e adotada. Se sobrar mais de uma, o dia continua PENDENTE e derruba o preflight. Codigo em medgrowth/emily-vendas/interpretar-horarios.mjs, com testes.",
+    "por_que": "Uma clinica de estetica nao atende as 2 da manha. '2 as 8' so pode ser 14:00-20:00 — nao existe outra leitura. Tratar isso como ambiguo era rigor no lugar errado: travava o piloto sem proteger ninguem.",
+    "resolvido": {
+      "seg": {
+        "respondeu": "2:00 as 8:00",
+        "leu": "14:00-20:00",
+        "descartado": "02:00-08:00 e 02:00-20:00 (abrir as 2 da manha), 14:00-08:00 (fim antes do inicio)"
+      },
+      "ter": {
+        "respondeu": "11:00 as 8:00",
+        "leu": "11:00-20:00",
+        "descartado": "11:00-08:00 (fim antes do inicio), 23:00-* (fora da janela)"
+      },
+      "qua": {
+        "respondeu": "10:30 as 8:00",
+        "leu": "10:30-20:00",
+        "descartado": "10:30-08:00, 22:30-*"
+      },
+      "qui": {
+        "respondeu": "10:00 as 8:00",
+        "leu": "10:00-20:00",
+        "descartado": "10:00-08:00, 22:00-*"
+      },
+      "sex": {
+        "respondeu": "8:00 as 8:00",
+        "leu": "08:00-20:00",
+        "descartado": "08:00-08:00 e 20:00-20:00 (duracao zero), 20:00-08:00 (fim antes do inicio)"
+      },
+      "sab": {
+        "respondeu": "8:00 as 8:00",
+        "leu": "08:00-20:00",
+        "descartado": "igual sexta"
+      },
+      "dom": {
+        "respondeu": "10:30 as 3:00",
+        "leu": "10:30-15:00",
+        "descartado": "10:30-03:00 (fim antes do inicio), 22:30-*"
+      }
+    },
+    "ancoras": "12 = meio-dia e 0 = meia-noite nao mudam de lado; horas ja escritas em 24h (13-23) sao respeitadas como vieram."
+  },
+  "_aviso_sexta_sabado": "ATENCAO, PERGUNTA ABERTA PARA ANDREIA: sexta e sabado ela declarou abertura as 08:00, o que COLIDE com o bloqueio da academia 07:30-10:00. As duas respostas se contradizem, e contradicao entre duas respostas nao se resolve por interpretacao — so ela resolve. Enquanto isso, prevalece o caminho seguro: a academia bloqueia TODOS os dias, entao sexta e sabado comecam as 10:00 na pratica. CUSTO DISSO: ela perde 08:00-10:00 nos dois dias mais movimentados. Basta ela dizer em que dias vai a academia para recuperar essas horas.",
+  "fonte_verdade": "Agendor",
+  "fuso_horario": "America/New_York",
+  "duracao_min": 50,
+  "buffer_min": 10,
+  "antecedencia_horas": 24,
+  "horizonte_dias": 14,
+  "quem_altera_agenda": {
+    "cria_remarca_cancela": [
+      "Andreia Carvalho"
+    ],
+    "emily": "apenas sugere e prepara; nenhuma alteracao sem aprovacao da Andreia e confirmacao explicita da cliente"
+  },
+  "divergencia_agenda": "Se a agenda do Agendor e a informacao manual divergirem, NAO marcar nada: pausar e perguntar a Andreia qual esta correta (resposta 2.7).",
+  "dias": {
+    "seg": [
+      "14:00-20:00"
+    ],
+    "ter": [
+      "11:00-20:00"
+    ],
+    "qua": [
+      "10:30-20:00"
+    ],
+    "qui": [
+      "10:00-20:00"
+    ],
+    "sex": [
+      "10:00-20:00"
+    ],
+    "sab": [
+      "10:00-20:00"
+    ],
+    "dom": [
+      "10:30-15:00"
+    ]
+  },
+  "bloqueios_fixos": [
+    {
+      "nome": "academia",
+      "faixa": "07:30-10:00",
+      "dias": "todos (caminho seguro enquanto Andreia nao disser em quais dias vai) — ja descontado das faixas acima",
+      "regra": "Bloqueio total: a Emily nunca oferece horario dentro dessa faixa."
+    }
+  ],
+  "_gerado_por": "emily-vendas/scripts/sincronizar-config.mjs — copia para o deploy. NAO editar aqui; edite em clinic-now-piloto-familia/config."
+}

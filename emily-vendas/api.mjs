@@ -26,16 +26,22 @@ import { homedir } from "node:os";
 import { avaliarPreflight } from "./preflight.mjs";
 import { proximosLivres } from "./interpretar-horarios.mjs";
 import { decidir } from "./regras.mjs";
-import { fila, historico, novaProposta, registrarDecisao, registrarAcaoAgenda, estatisticas, verificarCadeia } from "./ledger.mjs";
+// Namespace, e não imports soltos: o ledger virou peça trocável. Em disco (aqui, no Mac) ou em
+// Postgres (na nuvem, onde não existe disco). A mesma superfície nos dois — quem troca é quem
+// chama `criarHandler`, e nenhuma rota sabe qual está em uso.
+import * as ledgerArquivo from "./ledger.mjs";
 import { assinaturaValida, configAgendor, gravarEspelho, lerCompromissos, lerEspelho } from "./agendor.mjs";
 import { carregarEnv } from "./lib.mjs";
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORTA = Number(process.env.CLINICNOW_API_PORT || 4791);
+// Allowlist de origem. Local sempre; na nuvem, a origem do painel publicado entra por env.
+// Vírgula separa mais de uma (preview da Vercel + produção, por exemplo). Continua allowlist:
+// origem desconhecida leva 403 antes de qualquer rota.
 const ORIGENS_PERMITIDAS = new Set([
   "http://localhost:5190",
   "http://127.0.0.1:5190",
-  process.env.CLINICNOW_ORIGEM_EXTRA,
+  ...String(process.env.CLINICNOW_ORIGEM_EXTRA || "").split(",").map((o) => o.trim()),
 ].filter(Boolean));
 
 /**
@@ -93,9 +99,18 @@ export function calcularGate(cfg) {
   const erros = avaliarPreflight(cfg);
   const gradeDefinida = Boolean(cfg.agenda?.dias) && !temPlaceholder(cfg.agenda.dias)
     && Object.values(cfg.agenda.dias).some((faixas) => Array.isArray(faixas) && faixas.some((f) => /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(String(f))));
-  const tomValidado = Array.isArray(cfg.clinica?.voz?.respostas_modelo_no_tom_dela)
-    && cfg.clinica.voz.respostas_modelo_no_tom_dela.length > 0
-    && !temPlaceholder(cfg.clinica.voz.respostas_modelo_no_tom_dela);
+  // Tom validado ≠ política definida.
+  //
+  // Em 14/08 Sostenes definiu a POLÍTICA das três respostas (descobrir antes de precificar,
+  // horário sai da agenda, o resto escala) e isso já é vinculante e está no motor. Mas quem
+  // escreveu as PALAVRAS fomos nós. A voz é da Andreia, e só ela pode dizer que aquilo tem a
+  // cara dela — por isso o gate depende de uma marca explícita dela, e não da mera existência
+  // do campo. Ler "existe texto, então está validado" seria transformar rascunho nosso em voz
+  // dela por descuido de código.
+  const respostas = cfg.clinica?.voz?.respostas_modelo;
+  const tomValidado = Boolean(respostas)
+    && respostas.aprovado_pela_andreia === true
+    && !temPlaceholder(respostas);
   return {
     preflight_aprovado: erros.length === 0,
     erros_preflight: erros,
@@ -268,7 +283,7 @@ function cors(req, res) {
   if (!origem) return true; // curl/local, sem navegador
   if (!ORIGENS_PERMITIDAS.has(origem)) return false;
   res.setHeader("Access-Control-Allow-Origin", origem);
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-ClinicNow-Operador");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-ClinicNow-Operador, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Vary", "Origin");
   return true;
@@ -286,7 +301,18 @@ async function corpoJson(req, limite = 64 * 1024) {
   return { bruto, dados: bruto ? JSON.parse(bruto) : {} };
 }
 
-export function criarHandler({ agendaMarcar = null } = {}) {
+/**
+ * @param agendaMarcar  executor de agenda (null = nenhuma ação real de agenda)
+ * @param ledger        implementação do ledger. Padrão: arquivo. Na nuvem: `ledgerSupabase(...)`,
+ *                      criado por requisição com o JWT de quem está logado.
+ * @param aprovadorDe   como descobrir quem está operando. Padrão: o header do painel local.
+ *                      Na nuvem, quem manda é a identidade autenticada, não um header digitável.
+ */
+export function criarHandler({
+  agendaMarcar = null,
+  ledger = ledgerArquivo,
+  aprovadorDe = (req) => req.headers["x-clinicnow-operador"],
+} = {}) {
   return async function handler(req, res) {
     const url = new URL(req.url, `http://127.0.0.1:${PORTA}`);
     if (!cors(req, res)) return json(res, 403, { erro: "origem não permitida" });
@@ -311,22 +337,22 @@ export function criarHandler({ agendaMarcar = null } = {}) {
             observacao: "A ação é sempre decidida por regra. O LLM só poliria o texto.",
           },
           agendor: { ...configAgendor(), token: undefined, espelho: lerEspelho() },
-          ledger: verificarCadeia(),
-          estatisticas: estatisticas(),
+          ledger: await ledger.verificarCadeia(),
+          estatisticas: await ledger.estatisticas(),
         });
       }
 
       if (req.method === "GET" && url.pathname === "/api/fila") {
-        return json(res, 200, { fila: fila(), gate });
+        return json(res, 200, { fila: await ledger.fila(), gate });
       }
 
       if (req.method === "GET" && url.pathname === "/api/historico") {
-        return json(res, 200, { historico: historico() });
+        return json(res, 200, { historico: await ledger.historico() });
       }
 
       // ---- nova mensagem → proposta (NÃO envia nada, NÃO mexe na agenda)
       if (req.method === "POST" && url.pathname === "/api/proposta") {
-        const operador = req.headers["x-clinicnow-operador"];
+        const operador = await aprovadorDe(req);
         if (!operador) return json(res, 400, { erro: "header X-ClinicNow-Operador obrigatório" });
         const { dados } = await corpoJson(req);
         const { canal = "whatsapp", alias, mensagem, contexto = {} } = dados;
@@ -363,7 +389,7 @@ export function criarHandler({ agendaMarcar = null } = {}) {
         if (!polimento.polido) decisao.motivo_sem_polimento = polimento.motivo;
         decisao.origem_ocupacoes = { fonte: oc.fonte, motivo: oc.motivo, frescor_min: oc.frescor_min, horarios_de: livres.fonte };
 
-        const id = novaProposta({
+        const id = await ledger.novaProposta({
           canal,
           alias,
           mensagem,
@@ -377,15 +403,15 @@ export function criarHandler({ agendaMarcar = null } = {}) {
 
       // ---- decisão humana: o único caminho que faz qualquer coisa acontecer
       if (req.method === "POST" && url.pathname === "/api/decisao") {
-        const operador = req.headers["x-clinicnow-operador"];
+        const operador = await aprovadorDe(req);
         if (!operador) return json(res, 400, { erro: "header X-ClinicNow-Operador obrigatório" });
         const { dados } = await corpoJson(req);
         const { id, decisao, texto_final, texto_original, motivo_da_decisao } = dados;
 
-        const pendente = fila().find((p) => p.id === id);
+        const pendente = (await ledger.fila()).find((p) => p.id === id);
         if (!pendente) return json(res, 404, { erro: "proposta não está pendente" });
 
-        const evento = registrarDecisao({
+        const evento = await ledger.registrarDecisao({
           id,
           decisao,
           aprovador: String(operador),
@@ -411,7 +437,7 @@ export function criarHandler({ agendaMarcar = null } = {}) {
           } else {
             agendaResultado = { ok: false, motivo: "executor de agenda não configurado" };
           }
-          registrarAcaoAgenda({ id, resultado: agendaResultado.ok ? "executada" : "bloqueada", detalhe: agendaResultado, modoSintetico: gate.modo_sintetico });
+          await ledger.registrarAcaoAgenda({ id, resultado: agendaResultado.ok ? "executada" : "bloqueada", detalhe: agendaResultado, modoSintetico: gate.modo_sintetico });
         }
 
         return json(res, 200, {
@@ -436,7 +462,7 @@ export function criarHandler({ agendaMarcar = null } = {}) {
       }
 
       if (req.method === "GET" && url.pathname === "/api/ledger/verificar") {
-        return json(res, 200, verificarCadeia());
+        return json(res, 200, await ledger.verificarCadeia());
       }
 
       return json(res, 404, { erro: "rota desconhecida" });

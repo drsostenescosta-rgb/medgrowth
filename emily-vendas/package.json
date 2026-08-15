@@ -1,0 +1,16 @@
+{
+  "name": "clinicnow-emily-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Ponte de aprovação da Emily na nuvem. Mesmo motor de regras da versão local; muda só onde o ledger mora e como a identidade é provada.",
+  "scripts": {
+    "config:sync": "node scripts/sincronizar-config.mjs",
+    "predeploy": "node scripts/sincronizar-config.mjs",
+    "deploy": "vercel --prod --yes",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.53.0"
+  }
+}
