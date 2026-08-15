@@ -121,7 +121,10 @@ export function calcularGate(cfg) {
     modo_sintetico: erros.length > 0 && !MODO_OPERACAO,
     modo_operacao: MODO_OPERACAO,
     protecao_dados: MODO_OPERACAO
-      ? "operação real: telefone, e-mail, documento e data são REDIGIDOS antes de gravar. Nome próprio não é detectável — evite sobrenome. Retenção (7.3) segue pendente."
+      // A frase antiga terminava em "Retenção (7.3) segue pendente" e ficou mentindo na tela
+      // depois que Sostenes decidiu 90 dias em 14/08. Aviso desatualizado num painel de
+      // conformidade é pior que aviso nenhum: a pessoa passa a não ler o bloco inteiro.
+      ? "operação real: telefone, e-mail, documento e data são REDIGIDOS antes de gravar. Nome próprio não é detectável — evite sobrenome. Registros ficam 90 dias e depois são apagados (a purga automática ainda não existe: hoje é manual)."
       : "modo sintético: dado sensível é RECUSADO e só apelidos 'Cliente Demo NN' são aceitos.",
     pendencias_abertas: [
       !gradeDefinida && "2.3 — grade de horários semanais (AM/PM ambíguo)",
