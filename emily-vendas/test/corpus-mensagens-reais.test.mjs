@@ -179,8 +179,8 @@ test("corpus — primeira pessoa sobre OBJETO continua sem acender", () => {
 test('corpus — "how much?" curto escala em vez de responder a tabela em português', () => {
   // Era o único termo estrangeiro numa regra que RESPONDE: a frase curta não alcançava a margem
   // do portão de idioma e a cliente recebia os preços em português.
-  assert.notEqual(d("how much?").regra, "COM.PRECO_CATALOGO");
+  assert.notEqual(d("how much?").regra, "COM.PRECO_SERVICO");
   assert.equal(d("how much is the massage?").regra, "IDIOMA.NAO_IDENTIFICADO");
   // E a pergunta de preço em português continua sendo respondida.
-  assert.equal(d("quanto custa a drenagem?").regra, "COM.PRECO_CATALOGO");
+  assert.equal(d("quanto custa a drenagem?").regra, "COM.PRECO_SERVICO");
 });

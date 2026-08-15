@@ -11,6 +11,7 @@ import {
   ehDuvidaClinica,
   ehIntercorrenciaPosOp,
   ehPedidoDeDesconto,
+  mensagemRemanejo,
   renderRepergunta,
 } from "../regras.mjs";
 import { rodarTodos, GATE_HOJE } from "../cenarios-andreia.mjs";
@@ -25,11 +26,16 @@ const OPERACAO = {
     cancelamento: { antecedencia_minima_horas: 24 },
     conteudo_bloqueado: [{ descricao_aprovada: "O EMSzero é uma máquina de tonificação muscular." }],
   },
+  // Os três serviços do piloto. Precisam ser mais de um: com catálogo de um item só, o teste
+  // "não vazou os outros preços" passa sem provar nada.
   servicos: [
-    { nome_publico: "Drenagem linfática", preco_usd: 60, politica_operacional: { duracao_min: 50, buffer_min: 10 } },
+    { id: "drenagem-linfatica", nome_publico: "Drenagem linfática", preco_usd: 60, politica_operacional: { duracao_min: 50, buffer_min: 10 } },
+    { id: "pos-operatorio", nome_publico: "Pós-operatório", preco_usd: 100, politica_operacional: { duracao_min: 80, buffer_min: 10 } },
+    { id: "massoterapia-masculina", nome_publico: "Massoterapia masculina", preco_usd: 70, politica_operacional: { duracao_min: 50, buffer_min: 10 } },
   ],
 };
 const AGENDA = { fuso_horario: "America/New_York", duracao_min: 50, buffer_min: 10 };
+const CLINICA = { fuso_horario: "America/New_York" };
 const AGORA = "2026-08-14T18:00:00.000Z";
 
 function d(mensagem, contexto = {}, gate = GATE_HOJE) {
@@ -165,12 +171,38 @@ test("pacote 10x9 é benefício autorizado; qualquer outro desconto escala", () 
   assert.equal(d("consegue fazer mais barato?").regra, "COM.DESCONTO");
 });
 
-test("preço responde só com o catálogo autorizado e lembra da avaliação", () => {
+// Decisão de Sostenes em 14/08/2026: descoberta antes do preço. A tabela inteira nunca é
+// despejada, e nenhum valor sai antes de saber o que a cliente precisa.
+test("preço COM serviço nomeado: valor do catálogo, só daquele serviço, com avaliação", () => {
   const r = d("quanto custa a drenagem?");
-  assert.equal(r.regra, "COM.PRECO_CATALOGO");
+  assert.equal(r.regra, "COM.PRECO_SERVICO");
   assert.match(r.resposta_sugerida, /US\$ 60/);
   assert.match(r.resposta_sugerida, /avaliação/i);
   assert.ok(r.bloqueios.includes("nenhum valor fora do catálogo"));
+  assert.doesNotMatch(r.resposta_sugerida, /US\$ 100|US\$ 70/, "não pode listar os outros serviços");
+});
+
+test("preço SEM saber o serviço: pergunta primeiro e nenhum valor sai", () => {
+  for (const m of ["quanto custa?", "qual o valor?", "me manda a tabela de valores"]) {
+    const r = d(m);
+    assert.equal(r.regra, "COM.PRECO_DESCOBERTA", `"${m}" deveria abrir descoberta`);
+    assert.doesNotMatch(r.resposta_sugerida, /US\$|\bR\$|\d+\s*(dolar|reais)/i, `"${m}" vazou valor`);
+    assert.ok(r.bloqueios.includes("NENHUM valor nesta mensagem"));
+    assert.equal(r.acao, "responder", "descoberta é conversa, não escalada");
+  }
+});
+
+test("preço com descoberta feita mas serviço indefinido é decisão clínica da Andreia", () => {
+  const r = d("quanto custa?", { descoberta_feita: true });
+  assert.equal(r.regra, "COM.PRECO_SERVICO_INDEFINIDO");
+  assert.equal(r.acao, "escalar");
+  assert.doesNotMatch(r.resposta_sugerida, /US\$/);
+});
+
+test("serviço vindo do contexto da cliente dispensa nova descoberta", () => {
+  const r = d("quanto fica?", { servico: "pos-operatorio" });
+  assert.equal(r.regra, "COM.PRECO_SERVICO");
+  assert.match(r.resposta_sugerida, /US\$ 100/);
 });
 
 // ---------------------------------------------------------------- clínico e pós-op
@@ -203,10 +235,54 @@ test("com a grade CONFIRMADA a Emily passa a propor horário", () => {
   assert.equal(r.acao_agenda.tipo, "propor_horario");
 });
 
-test("sinal e lista de espera não são prometidos enquanto a regra 4.6 está pendente", () => {
+test("sinal: sem política, a Emily não cobra nem promete — escala", () => {
   const r = d("precisa pagar sinal pra reservar?");
-  assert.equal(r.regra, "PEND.4_6_SINAL_LISTA_ESPERA");
+  assert.equal(r.regra, "COM.SINAL_SEM_POLITICA");
+  assert.equal(r.acao, "escalar");
   assert.ok(r.bloqueios.includes("não mencionar valor de sinal"));
+  assert.doesNotMatch(r.resposta_sugerida, /US\$|\d+\s*(dolar|reais)/i);
+});
+
+// Decisão de Sostenes em 14/08/2026: lista de espera não existe. No lugar, remanejo caso a caso.
+test("lista de espera: a Emily diz que não existe e não promete aviso automático", () => {
+  for (const m of ["tem lista de espera?", "me avisa se abrir vaga na sexta?"]) {
+    const r = d(m);
+    assert.equal(r.regra, "COM.SEM_LISTA_DE_ESPERA", `"${m}" deveria cair na regra de lista de espera`);
+    assert.equal(r.acao_agenda.tipo, "coletar_preferencia");
+    assert.ok(r.bloqueios.includes("não prometer fila nem aviso automático"));
+    assert.doesNotMatch(r.resposta_sugerida, /te aviso quando|assim que abrir|entro em contato assim/i);
+  }
+});
+
+test("remanejo: pede com alternativa concreta, garante o horário atual e permite recusar", () => {
+  const r = mensagemRemanejo({
+    primeiro_nome: "Bia",
+    servico: "Drenagem linfática",
+    horario_atual: "2026-08-20T18:00:00.000Z",
+    horario_alternativo: "2026-08-20T21:00:00.000Z",
+    clinica: CLINICA,
+    agenda: AGENDA,
+    agora: new Date("2026-08-19T12:00:00.000Z"),
+  });
+  assert.equal(r.regra, "AGENDA.REMANEJO_PEDIDO");
+  assert.equal(r.acao_agenda.tipo, "nenhuma", "a agenda não muda ao pedir");
+  assert.equal(r.envio_automatico, false);
+  assert.match(r.resposta_sugerida, /garantido/i, "precisa afirmar que o horário dela está mantido");
+  assert.match(r.resposta_sugerida, /não tem problema/i, "precisa dar permissão de recusar");
+  assert.doesNotMatch(r.resposta_sugerida, /outra cliente|outra pessoa|alguém quer/i, "não expor a outra cliente");
+  assert.doesNotMatch(r.resposta_sugerida, /urgente|preciso muito|por favor/i, "não pressionar");
+  assert.ok(r.bloqueios.includes("silêncio NÃO é aceite"));
+});
+
+test("remanejo sem alternativa concreta é bloqueado — não se pede mudança no vazio", () => {
+  const r = mensagemRemanejo({
+    primeiro_nome: "Bia",
+    horario_atual: "2026-08-20T18:00:00.000Z",
+    clinica: CLINICA,
+    agenda: AGENDA,
+  });
+  assert.equal(r.acao, "bloquear");
+  assert.equal(r.resposta_sugerida, null);
 });
 
 // ---------------------------------------------------------------- conflito puro

@@ -13,10 +13,23 @@ function erro(codigo, caminho, mensagem) {
   return { codigo, caminho, mensagem };
 }
 
+/**
+ * Chaves com `_` na frente são comentário, por convenção destes JSONs (`_fonte`, `_aviso`,
+ * `_nota_motor`). Elas descrevem a regra — inclusive a regra sobre placeholders — e por isso
+ * contêm a palavra "[PREENCHER" sem serem um campo por preencher.
+ *
+ * Isso já mordeu em 14/08/2026: com todos os campos reais da clínica respondidos, o preflight
+ * continuava reprovando o arquivo por causa da própria frase que explica o que é um placeholder.
+ * Um portão que acusa arquivo limpo é pior do que portão nenhum — ensina a ignorar o alarme.
+ */
 function temPlaceholder(valor) {
   if (typeof valor === "string") return PLACEHOLDER.test(valor);
   if (Array.isArray(valor)) return valor.some(temPlaceholder);
-  if (valor && typeof valor === "object") return Object.values(valor).some(temPlaceholder);
+  if (valor && typeof valor === "object") {
+    return Object.entries(valor)
+      .filter(([chave]) => !chave.startsWith("_"))
+      .some(([, v]) => temPlaceholder(v));
+  }
   return false;
 }
 

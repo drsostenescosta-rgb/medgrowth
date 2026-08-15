@@ -205,6 +205,8 @@ const PRECO = ["quanto custa", "qual o valor", "qual valor", "preco", "quanto e"
 
 const SINAL = ["sinal", "deposito", "adiantamento", "pagar antes", "reservar pagando"];
 
+const LISTA_ESPERA = ["lista de espera", "fila de espera", "me avisa se abrir", "avisa se vagar", "me avisa se desmarcar"];
+
 // Alegação bloqueada (regra 9) — qualquer variação de resultado numérico do EMSzero.
 const EMSZERO = ["emszero", "ems zero", "ms zero", "emzero"];
 const ALEGACAO_CALORIA = ["caloria", "calorias", "queima", "equivale a", "abdominais", "dias de exercicio", "emagrece", "perde peso", "perder peso"];
@@ -363,6 +365,33 @@ export function ehOptOut(msg) {
 
 export function ehUrgencia(msg) {
   return contem(msg, URGENCIA);
+}
+
+/**
+ * A cliente nomeou um serviço do catálogo na mensagem? Devolve o serviço ou null.
+ *
+ * Existe para a regra de preço: sem saber DE QUE serviço se fala, não há preço a dar — há uma
+ * pergunta a fazer. Casa nome público, nome em inglês, apelido falado ("drenagem") e o id.
+ */
+export function servicoMencionado(texto, operacao = {}, clinica = {}) {
+  const servicos = Array.isArray(operacao.servicos) ? operacao.servicos : [];
+  return servicos.find((s) => contem(texto, nomesDoServico(s, clinica))) || null;
+}
+
+/**
+ * Todos os jeitos de nomear um serviço. Inclui a variante com hífen E com espaço porque o id
+ * vem como "pos-operatorio" e a cliente escreve "pós operatório" — e o casador trata hífen como
+ * fronteira de palavra, então uma forma não encontra a outra.
+ */
+function nomesDoServico(s, clinica = {}) {
+  const brutos = [s.nome_publico, s.nome_en, apelidoServico(s.nome_publico, clinica), s.id].filter(Boolean);
+  const nomes = new Set();
+  for (const bruto of brutos) {
+    const n = String(bruto);
+    nomes.add(n);
+    nomes.add(n.replace(/-/g, " "));
+  }
+  return [...nomes];
 }
 
 /** O serviço da cliente é pós-operatório? Basta isso para um sinal fraco virar relato clínico. */
@@ -802,15 +831,44 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
     }
   }
 
-  // ---- 11. sinal / lista de espera: pendência 4.6 aberta → não prometer nada
-  if (contem(texto, SINAL) || contem(texto, ["lista de espera"])) {
+  // ---- 11a. lista de espera: DECIDIDO em 14/08/2026 — não existe.
+  //
+  // Sostenes: "não vai ter lista de espera; só se for em relação ao horário, ela vai tentar
+  // encaixar ou falar com as clientes que estão naquele horário e tentar manejar".
+  // Ou seja: no lugar de uma fila anônima, um remanejo caso a caso, decidido pela Andreia.
+  // A Emily não promete fila, não promete aviso automático e não fala com a outra cliente por
+  // conta própria — ela oferece o caminho real e passa a decisão para a Andreia.
+  if (contem(texto, LISTA_ESPERA)) {
+    return resultado({
+      ...base,
+      acao: "responder",
+      regra: "COM.SEM_LISTA_DE_ESPERA",
+      motivo:
+        "Lista de espera não existe (decisão 14/08). O caminho real é remanejo caso a caso, "
+        + "e quem decide remanejar é a Andreia.",
+      corpo:
+        "lista de espera a gente não tem, pra não te deixar na dúvida esperando. "
+        + "Mas me fala qual horário você queria que eu vejo com a Andreia se dá pra ajeitar",
+      acao_agenda: { tipo: "coletar_preferencia", detalhe: "Registrar o horário desejado. Nada reservado." },
+      bloqueios: [
+        "não prometer fila nem aviso automático",
+        "não afirmar que o horário vai abrir",
+        "não falar com a outra cliente sem decisão da Andreia",
+      ],
+    });
+  }
+
+  // ---- 11b. sinal: não existe política. Sostenes decidiu a lista de espera em 14/08 e não
+  // falou de sinal — silêncio não é "sim" nem "não". Então a Emily nunca menciona sinal e
+  // escala se perguntarem. Comportamento totalmente definido; deixou de ser pendência aberta.
+  if (contem(texto, SINAL)) {
     return resultado({
       ...base,
       acao: "escalar",
-      regra: "PEND.4_6_SINAL_LISTA_ESPERA",
-      motivo: "Regra de sinal e lista de espera está PENDENTE-CONFIRMAR (4.6). A Emily não promete nem cobra.",
+      regra: "COM.SINAL_SEM_POLITICA",
+      motivo: "Não existe política de sinal. A Emily não cobra, não promete e não inventa valor.",
       corpo: CORPO.escalar_sinal,
-      bloqueios: ["não mencionar valor de sinal", "não prometer lista de espera"],
+      bloqueios: ["não mencionar valor de sinal", "não cobrar nada antecipado"],
     });
   }
 
@@ -851,22 +909,91 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
     });
   }
 
-  // ---- 13. preço: catálogo autorizado responde; avaliação prévia é obrigatória
+  // ---- 13. preço: DESCOBERTA ANTES DO VALOR (decisão de Sostenes, 14/08/2026)
+  //
+  // A regra anterior despejava a tabela inteira na primeira pergunta. Sostenes vetou:
+  // "sempre primeiro perguntando e validando a cliente com as regras de venda, antes de passar
+  // qualquer tipo de preço; tentando entender ao máximo o que a cliente precisa".
+  //
+  // Então o preço tem duas portas, e a primeira é uma pergunta:
+  //   a) não sei do que ela precisa  → pergunto (nenhum valor sai)
+  //   b) sei o serviço               → dou o valor DAQUELE serviço, da tabela, e só dele
+  // A tabela completa nunca é despejada: cardápio é o site, atendimento é conversa.
   if (contem(texto, PRECO)) {
     const servicos = Array.isArray(operacao.servicos) ? operacao.servicos : [];
-    const tabela = servicos
-      .map((s) => `${apelidoServico(s.nome_publico, clinica)} — US$ ${s.preco_usd} (${s.politica_operacional?.duracao_min}min)`)
-      .join("\n");
+    if (!servicos.length) {
+      return resultado({
+        ...base,
+        acao: "escalar",
+        regra: "COM.PRECO_SEM_CATALOGO",
+        motivo: "Pergunta de preço sem catálogo carregado na configuração. A Emily não inventa valor.",
+        corpo: CORPO.escalar_desconto,
+        bloqueios: ["nenhum valor sem catálogo"],
+        alertas: ["Catálogo vazio na configuração — escalar"],
+      });
+    }
+
+    // O serviço pode vir da própria mensagem, do cadastro da cliente, ou de o humano ter
+    // conversado e marcado a descoberta como feita no painel.
+    const doTexto = servicoMencionado(texto, operacao, clinica);
+    const doContexto = ctx.servico
+      ? servicos.find((s) => contem(String(ctx.servico), nomesDoServico(s, clinica))) || null
+      : null;
+    const servico = doTexto || doContexto;
+
+    if (!servico && ctx.descoberta_feita !== true) {
+      return resultado({
+        ...base,
+        acao: "responder",
+        regra: "COM.PRECO_DESCOBERTA",
+        motivo:
+          "Pergunta de preço SEM saber o que a cliente precisa. Regra de venda: descobrir primeiro, "
+          + "precificar depois. Nenhum valor sai nesta mensagem.",
+        corpo:
+          "me conta rapidinho o que você tá querendo melhorar? "
+          + "Assim eu já te falo certinho o que a Andreia indica pro seu caso e quanto fica",
+        acao_agenda: { tipo: "nenhuma", detalhe: "Descoberta em andamento — nada agendado." },
+        bloqueios: [
+          "NENHUM valor nesta mensagem",
+          "não listar a tabela de serviços",
+          "não prometer resultado",
+        ],
+        alertas: [
+          "Descoberta: se a cliente já disse do que precisa, marque `descoberta_feita` antes de aprovar",
+        ],
+      });
+    }
+
+    // Descoberta feita mas serviço ainda não identificado: quem escolhe o procedimento é a
+    // Andreia (todos exigem avaliação prévia), não a Emily e não a cliente.
+    if (!servico) {
+      return resultado({
+        ...base,
+        acao: "escalar",
+        regra: "COM.PRECO_SERVICO_INDEFINIDO",
+        motivo:
+          "Descoberta feita, mas o serviço certo ainda não está definido — e indicar procedimento "
+          + "é avaliação clínica, que é da Andreia.",
+        corpo: CORPO.escalar_clinico,
+        bloqueios: ["não indicar procedimento", "não dar valor sem serviço definido"],
+      });
+    }
+
+    const apelido = apelidoServico(servico.nome_publico, clinica);
     return resultado({
       ...base,
       acao: "responder",
-      regra: "COM.PRECO_CATALOGO",
-      motivo: "Pergunta de preço respondida com o catálogo autorizado. Nenhum valor fora da tabela.",
-      corpo: tabela
-        ? `os valores são:\n${tabela}\n\nTodos passam por uma avaliação antes, pra Andreia ver o que é melhor pra você. Quer que eu veja um horário?`
-        : CORPO.escalar_padrao,
-      bloqueios: ["nenhum valor fora do catálogo", "nenhum desconto"],
-      alertas: servicos.length ? [] : ["Catálogo vazio na configuração — escalar"],
+      regra: "COM.PRECO_SERVICO",
+      motivo: `Serviço identificado (${servico.id}). Valor do catálogo autorizado, só deste serviço.`,
+      corpo:
+        `${apelido} fica US$ ${servico.preco_usd}, sessão de ${servico.politica_operacional?.duracao_min} min. `
+        + "Antes a Andreia faz uma avaliação com você, pra ver se é mesmo o melhor pro seu caso. "
+        + "Quer que eu veja um horário?",
+      bloqueios: [
+        "nenhum valor fora do catálogo",
+        "nenhum desconto",
+        "não listar os outros serviços",
+      ],
     });
   }
 
@@ -890,6 +1017,80 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
     corpo: CORPO.escalar_padrao,
     bloqueios: ["não inventar resposta", "não inventar prazo"],
   });
+}
+
+/**
+ * Pedido de remanejo — a mensagem que vai para a cliente que JÁ TEM o horário.
+ *
+ * Substitui a lista de espera (decisão de Sostenes, 14/08/2026): quando alguém quer um horário
+ * ocupado, a Andreia decide se vale perguntar à cliente daquele horário se ela topa mudar.
+ *
+ * O tom foi especificado por ele e é o ponto inteiro da funcionalidade: "sempre com tom de
+ * realmente saber que não está incomodando e que a cliente realmente pode [dizer não]". Por isso
+ * a mensagem faz três coisas, nesta ordem:
+ *   1. deixa explícito que o horário dela está garantido — a pergunta não é um aviso de mudança;
+ *   2. oferece uma alternativa concreta, não um "quando você puder";
+ *   3. termina dando permissão de recusar, sem pedir justificativa.
+ *
+ * O que ela NUNCA faz: dizer que outra pessoa quer o horário (a agenda de uma cliente não é
+ * assunto de outra), insinuar urgência, ou tratar silêncio como aceite.
+ *
+ * Não envia nada: devolve rascunho para o Painel de Aprovação, como todo o resto da Fase 1.
+ */
+export function mensagemRemanejo({
+  primeiro_nome = null,
+  servico = null,
+  horario_atual = null,
+  horario_alternativo = null,
+  atendimentos_anteriores = 0,
+  clinica = {},
+  agenda = {},
+  agora = new Date(),
+} = {}) {
+  const fuso = agenda.fuso_horario || clinica.fuso_horario || "America/New_York";
+  const nivel = nivelRelacao(atendimentos_anteriores);
+  const apelido = servico ? apelidoServico(servico, clinica) : null;
+  const atual = horario_atual ? rotuloQuando(horario_atual, { fuso, agora }) : null;
+  const alternativo = horario_alternativo ? rotuloQuando(horario_alternativo, { fuso, agora }) : null;
+
+  // Sem horário alternativo real não há pedido a fazer: perguntar "pode mudar?" sem dizer para
+  // quando é empurrar o problema para a cliente. Fail-closed, como o resto do motor.
+  if (!atual || !alternativo) {
+    return {
+      acao: "bloquear",
+      regra: "AGENDA.REMANEJO_SEM_ALTERNATIVA",
+      motivo: "Remanejo exige o horário atual E uma alternativa concreta. Sem os dois, não há pedido a enviar.",
+      resposta_sugerida: null,
+      requer_aprovacao_humana: true,
+      envio_automatico: false,
+      bloqueios: ["não pedir mudança sem oferecer horário concreto"],
+    };
+  }
+
+  const corpo =
+    `seu horário${apelido ? ` de ${apelido}` : ""} de ${atual} tá garantido, viu? `
+    + `Só queria te perguntar uma coisa: por acaso ${alternativo} ficaria bom pra você também? `
+    + "Se ficar, eu ajeito aqui. Se não ficar, não tem problema nenhum, fica como está";
+
+  return {
+    acao: "responder",
+    regra: "AGENDA.REMANEJO_PEDIDO",
+    motivo:
+      "Pedido de remanejo caso a caso, no lugar de lista de espera. Só sai com aprovação da Andreia, "
+      + "e o horário atual permanece ocupado até a cliente aceitar de forma explícita.",
+    resposta_sugerida: montar({ nivel, primeiroNome: primeiro_nome, corpo, situacao: "aguardando_resposta" }),
+    acao_agenda: { tipo: "nenhuma", detalhe: "O horário atual PERMANECE dela até aceitar explicitamente." },
+    relacao: nivel,
+    requer_aprovacao_humana: true,
+    envio_automatico: false,
+    bloqueios: [
+      "não dizer que outra cliente quer o horário",
+      "não criar urgência nem pressionar",
+      "silêncio NÃO é aceite",
+      "'tá bom' NÃO é aceite — vale a mesma regra da confirmação",
+      "só mover a agenda depois de um sim explícito",
+    ],
+  };
 }
 
 export const CORPOS = CORPO;

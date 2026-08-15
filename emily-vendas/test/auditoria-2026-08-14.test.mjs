@@ -100,7 +100,7 @@ test("G6 — segurança vem antes do idioma: urgência em inglês continua PRIOR
 });
 
 test("G6 — português comum NÃO é escalado por idioma", () => {
-  assert.equal(d("quanto custa a drenagem?").regra, "COM.PRECO_CATALOGO");
+  assert.equal(d("quanto custa a drenagem?").regra, "COM.PRECO_SERVICO");
   const ctx = { aguardando_confirmacao: true, horario_alvo: "2026-08-19T18:00:00.000Z", servico: "Drenagem linfática" };
   assert.equal(d("ok", ctx).regra, "R1.CONFIRMACAO_AMBIGUA", "mensagem curta não é prova de idioma estrangeiro");
   assert.equal(d("tá bom", ctx).regra, "R1.CONFIRMACAO_AMBIGUA");
