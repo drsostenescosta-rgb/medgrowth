@@ -15,6 +15,7 @@ import {
   renderRepergunta,
 } from "../regras.mjs";
 import { rodarTodos, GATE_HOJE } from "../cenarios-andreia.mjs";
+import { fechamento } from "../voz.mjs";
 
 const OPERACAO = {
   regras: {
@@ -189,6 +190,32 @@ test("preço SEM saber o serviço: pergunta primeiro e nenhum valor sai", () => 
     assert.doesNotMatch(r.resposta_sugerida, /US\$|\bR\$|\d+\s*(dolar|reais)/i, `"${m}" vazou valor`);
     assert.ok(r.bloqueios.includes("NENHUM valor nesta mensagem"));
     assert.equal(r.acao, "responder", "descoberta é conversa, não escalada");
+  }
+});
+
+// Este teste não existia e por isso o furo só apareceu com a mensagem saindo inteira pela API
+// na nuvem: a pergunta de descoberta vinha com "Assim que ela me responder eu te aviso" colado,
+// prometendo um retorno da Andreia que ninguém tinha pedido.
+test("mensagem que termina perguntando não leva fecho nenhum depois da pergunta", () => {
+  const casos = [
+    ["quanto custa?", {}],
+    ["quanto custa a drenagem?", {}],
+    ["tem lista de espera?", {}],
+  ];
+  // Comparar contra os fechos REAIS, e não caçar palavra solta: "Assim eu já te falo certinho o
+  // que a Andreia indica" é o corpo da própria mensagem e casaria com uma busca por "já te falo".
+  const fechosPossiveis = ["aguardando_resposta", "confirmado", "informacao"]
+    .flatMap((s) => ["nova", "conhecida", "de_casa"].map((n) => fechamento(n, s)))
+    .filter(Boolean);
+
+  for (const [msg, ctx] of casos) {
+    const t = d(msg, ctx).resposta_sugerida;
+    for (const fecho of fechosPossiveis) {
+      assert.ok(!t.endsWith(fecho), `"${msg}" terminou com fecho "${fecho}" depois de fazer uma pergunta`);
+    }
+    // Não dá para caçar "minúscula + espaço + maiúscula": "o que a Andreia indica" é nome
+    // próprio, não frase emendada. O que dá para exigir é que a mensagem TERMINE fechada.
+    assert.match(t, /[.?!]$|\p{Extended_Pictographic}(?:️)?$/u, `"${msg}" terminou sem pontuação: ${t}`);
   }
 });
 

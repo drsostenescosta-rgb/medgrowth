@@ -134,7 +134,7 @@ export function abertura(nivel, primeiroNome = null) {
  * "Te espero!" só pode sair quando existe horário confirmado. Fechar com "te espero" logo
  * depois de a cliente cancelar é o tipo de detalhe que denuncia que quem escreveu foi um robô.
  */
-export const SITUACOES = Object.freeze(["aguardando_resposta", "confirmado", "informacao", "encerrado"]);
+export const SITUACOES = Object.freeze(["aguardando_resposta", "confirmado", "informacao", "encerrado", "pergunta"]);
 
 export function fechamento(nivel, situacao = "informacao") {
   const tabela = {
@@ -154,6 +154,14 @@ export function fechamento(nivel, situacao = "informacao") {
       de_casa: "Qualquer coisa me chama 😘",
     },
     encerrado: { nova: "", conhecida: "", de_casa: "" },
+    // Mensagem que TERMINA perguntando não leva fecho nenhum.
+    //
+    // Pego rodando a nuvem de verdade: a pergunta de descoberta saiu como "…me conta o que você
+    // tá querendo melhorar? (…) Assim que ela me responder eu te aviso, tá bom?" — duas frases
+    // que se contradizem, porque a Emily acabou de perguntar e não há nada sendo esperado da
+    // Andreia. Mesmo o fecho neutro ("qualquer dúvida me chama") atropela: quem faz uma pergunta
+    // quer resposta, e não mais três linhas. Silêncio é o fecho certo aqui.
+    pergunta: { nova: "", conhecida: "", de_casa: "" },
   };
   return (tabela[situacao] || tabela.informacao)[nivel] ?? tabela.informacao.conhecida;
 }

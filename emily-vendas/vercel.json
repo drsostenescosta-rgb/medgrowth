@@ -1,20 +1,32 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/[...rota].mjs": {
+    "api/**/*.mjs": {
       "includeFiles": "config-piloto/**"
     }
   },
   "rewrites": [
-    { "source": "/webhooks/(.*)", "destination": "/api/webhooks/$1" }
+    {
+      "source": "/webhooks/(.*)",
+      "destination": "/api/webhooks/$1"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "no-referrer" },
-        { "key": "Cache-Control", "value": "no-store" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
       ]
     }
   ]

@@ -316,8 +316,13 @@ const SITUACAO_POR_REGRA = {
   "R6.URGENCIA": "encerrado",
   "R6.INTERCORRENCIA_POS_OP": "encerrado",
   "R9.ALEGACAO_BLOQUEADA": "informacao",
-  "COM.PRECO_CATALOGO": "informacao",
-  "AGENDA.PROPOR_HORARIO": "informacao",
+  // Todas estas TERMINAM perguntando à cliente. Fecho depois de pergunta atropela a pergunta —
+  // e no caso do fecho "aguardando_resposta" chega a mentir ("já te aviso" sem nada a avisar).
+  // Descoberto com a mensagem saindo inteira pela API na nuvem, não em teste unitário.
+  "COM.PRECO_DESCOBERTA": "pergunta",
+  "COM.PRECO_SERVICO": "pergunta",
+  "COM.SEM_LISTA_DE_ESPERA": "pergunta",
+  "AGENDA.PROPOR_HORARIO": "pergunta",
 };
 
 function resultado({
@@ -848,7 +853,7 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
         + "e quem decide remanejar é a Andreia.",
       corpo:
         "lista de espera a gente não tem, pra não te deixar na dúvida esperando. "
-        + "Mas me fala qual horário você queria que eu vejo com a Andreia se dá pra ajeitar",
+        + "Mas me fala qual horário você queria que eu vejo com a Andreia se dá pra ajeitar.",
       acao_agenda: { tipo: "coletar_preferencia", detalhe: "Registrar o horário desejado. Nada reservado." },
       bloqueios: [
         "não prometer fila nem aviso automático",
@@ -951,7 +956,7 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
           + "precificar depois. Nenhum valor sai nesta mensagem.",
         corpo:
           "me conta rapidinho o que você tá querendo melhorar? "
-          + "Assim eu já te falo certinho o que a Andreia indica pro seu caso e quanto fica",
+          + "Assim eu já te falo certinho o que a Andreia indica pro seu caso e quanto fica.",
         acao_agenda: { tipo: "nenhuma", detalhe: "Descoberta em andamento — nada agendado." },
         bloqueios: [
           "NENHUM valor nesta mensagem",
