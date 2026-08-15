@@ -34,6 +34,7 @@
       "✨",
       "✅"
     ],
+    "_nota_emojis": "Ela LISTOU esses no questionario, mas nas mensagens que ela digitou de verdade (amostras de 15/08) nao aparece nenhum — o unico emoji visto, o 😊, era do template do robo. Provavel que sejam de conversa ja adiantada. Regra ate ela dizer o contrario: emoji com parcimonia, e NENHUM no primeiro contato.",
     "evitar": [
       "Prezada cliente",
       "venho por meio desta",
@@ -41,6 +42,48 @@
       "mensagens longas",
       "qualquer tom formal"
     ],
+    "anti_exemplo_sistema_frio": {
+      "_o_que_e": "O lembrete automatico do agendador ANTERIOR, que ela desligou (dor #5 da entrevista). Sostenes em 15/08: 'esse e sistema frio que mandava, ela nao quer algo assim; algo mais pessoal e real e o que buscamos'. Fica registrado como ANTI-GABARITO: e o unico jeito de 'evitar tom formal' virar instrucao testavel em vez de conselho vago.",
+      "texto_do_robo": "Oi [Nome], tudo bem?\n\nEste e um lembrete para o seu atendimento, dia (Hoje) 14 de Agosto as 6:45 pm.\n\nServico: RADIO FREQUENCIA + ULTRA CAVITACAO ( 1 Area )\n\nVoce merece esse cuidado especial\n\nObrigado. 😊",
+      "traços_proibidos": [
+        "terceira pessoa institucional ('Este e um lembrete para o seu atendimento')",
+        "parenteses de sistema na data ('dia (Hoje) 14 de Agosto')",
+        "rotulo com dois-pontos e caixa alta ('Servico: DRENAGEM LINFATICA')",
+        "frase de marketing colada em toda mensagem ('Voce merece esse cuidado especial')",
+        "assinatura fixa de template ('Obrigado. 😊' — ainda por cima no masculino)",
+        "'Aguardando por voce'",
+        "negrito em bloco, formatando a mensagem como documento"
+      ],
+      "resultado_observado": "Uma cliente respondeu so 'ok'; outra mandou um coracao. Nenhuma engatou conversa."
+    },
+    "amostras_reais_dela": {
+      "_fonte": "Conversa de primeiro contato com cliente nova, ela digitando ao vivo (15/08/2026). Detalhes em docs/voz-real-da-andreia.md. Nenhum dado de cliente aqui.",
+      "resposta_de_ausencia": "Sou Andréia Carvalho\n\nAgradeço seu contato, assim que possível responderei, se preferir deixe mensagem de como posso te ajudar !\n\nLevar autoestima e autocuidado para você, é minha prioridade.",
+      "cumprimento": "Bom dia / Tudo bem com você?",
+      "pergunta_o_nome_primeiro": "Como se chama ?",
+      "apresentacao": "*Me chamo Andréia Carvalho ,\nsou Massoterapeuta e Esteticista a 10 anos\n*Aqui vou te mostrar um pouco sobre o meu trabalho e sobre os resultados",
+      "mostra_prova": "Alguns resultados",
+      "frase_de_marca_aprovada": "Levar autoestima e autocuidado para você, é minha prioridade.",
+      "credencial": "Massoterapeuta e esteticista ha 10 anos — dito por ela; a prova social mais forte que ela tem e ainda nao estava em lugar nenhum.",
+      "marcas_de_escrita": [
+        "frases curtas, uma ideia por linha, linha em branco entre blocos",
+        "espaco antes de ? e ! ('Como se chama ?', 'te ajudar !')",
+        "asterisco como marcador de topico",
+        "'voce' por extenso, nunca 'vc'",
+        "sem giria, sem 'querida', sem 'amiga'",
+        "cumprimento em mensagem separada da pergunta"
+      ]
+    },
+    "ordem_do_primeiro_contato": {
+      "_o_que_e": "A sequencia que ela usa de verdade. A regra de venda que Sostenes definiu em 14/08 ja era o que ela faz — mas pulava os dois primeiros passos dela.",
+      "passos": [
+        "1. cumprimentar",
+        "2. PERGUNTAR O NOME",
+        "3. apresentar a Andreia com a credencial (massoterapeuta e esteticista ha 10 anos)",
+        "4. mostrar prova (resultados)",
+        "5. so entao descobrir a necessidade e falar de servico, horario e valor"
+      ]
+    },
     "cliente_nova": "explicar mais, chamar pela primeira nome",
     "cliente_recorrente": "mais direta e proxima, sem intimidade exagerada",
     "respostas_modelo": {

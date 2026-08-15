@@ -954,9 +954,19 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
         motivo:
           "Pergunta de preço SEM saber o que a cliente precisa. Regra de venda: descobrir primeiro, "
           + "precificar depois. Nenhum valor sai nesta mensagem.",
-        corpo:
-          "me conta rapidinho o que você tá querendo melhorar? "
-          + "Assim eu já te falo certinho o que a Andreia indica pro seu caso e quanto fica.",
+        // Duas variantes, porque a ordem é a DELA (amostras de 15/08, docs/voz-real-da-andreia.md):
+        // ela cumprimenta, PERGUNTA O NOME, se apresenta com a credencial, mostra resultado, e só
+        // então descobre a necessidade. A versão anterior pulava direto para "o que quer melhorar?"
+        // — a regra de venda estava certa e a ordem estava errada.
+        //
+        // Uma pergunta por mensagem, também como ela faz. Custa uma ida e volta a mais e é o
+        // preço de não despejar duas perguntas em quem acabou de chegar.
+        corpo: ctx.primeiro_nome
+          ? "me conta rapidinho o que você tá querendo melhorar? "
+            + "Assim eu já te falo certinho o que a Andreia indica pro seu caso e quanto fica."
+          : "como você se chama? "
+            + "A Andreia é massoterapeuta e esteticista há 10 anos, e é ela quem vê o que faz "
+            + "sentido pro seu caso.",
         acao_agenda: { tipo: "nenhuma", detalhe: "Descoberta em andamento — nada agendado." },
         bloqueios: [
           "NENHUM valor nesta mensagem",

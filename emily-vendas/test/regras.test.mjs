@@ -185,11 +185,44 @@ test("preço COM serviço nomeado: valor do catálogo, só daquele serviço, com
 
 test("preço SEM saber o serviço: pergunta primeiro e nenhum valor sai", () => {
   for (const m of ["quanto custa?", "qual o valor?", "me manda a tabela de valores"]) {
-    const r = d(m);
+    const r = d(m, { primeiro_nome: "Bia" });
     assert.equal(r.regra, "COM.PRECO_DESCOBERTA", `"${m}" deveria abrir descoberta`);
     assert.doesNotMatch(r.resposta_sugerida, /US\$|\bR\$|\d+\s*(dolar|reais)/i, `"${m}" vazou valor`);
     assert.ok(r.bloqueios.includes("NENHUM valor nesta mensagem"));
     assert.equal(r.acao, "responder", "descoberta é conversa, não escalada");
+  }
+});
+
+// A ordem é dela, não nossa: cumprimenta, PERGUNTA O NOME, apresenta a credencial, mostra prova,
+// e só então descobre a necessidade (amostras reais, docs/voz-real-da-andreia.md).
+test("sem saber o nome, a Emily pergunta o nome antes de qualquer outra coisa", () => {
+  const r = d("quanto custa?");
+  assert.equal(r.regra, "COM.PRECO_DESCOBERTA");
+  assert.match(r.resposta_sugerida, /como você se chama\?/i, "o passo 1 dela é perguntar o nome");
+  assert.match(r.resposta_sugerida, /10 anos/, "a credencial dela é a prova social que ela mesma usa");
+  assert.doesNotMatch(r.resposta_sugerida, /querendo melhorar/i, "uma pergunta por mensagem, como ela faz");
+  assert.doesNotMatch(r.resposta_sugerida, /US\$/, "nenhum valor antes da descoberta");
+});
+
+// O robô que ela DESLIGOU. Nenhum destes traços pode reaparecer em nenhuma resposta da Emily.
+test("nenhuma resposta reproduz o sistema frio que a Andreia desligou", () => {
+  const mensagens = [
+    "quanto custa?", "quanto custa a drenagem?", "tem lista de espera?", "quero marcar",
+    "tá bom", "preciso remarcar", "tem horário quinta?", "quanto fica o pós-operatório?",
+  ];
+  const proibidos = [
+    /este é um lembrete/i,
+    /serviço:/i,
+    /você merece esse cuidado especial/i,
+    /^obrigado\.?$/im,
+    /aguardando por você/i,
+    /\(hoje\)|\(amanhã\)/i,
+  ];
+  for (const m of mensagens) {
+    const t = d(m, { aguardando_confirmacao: m === "tá bom", servico: "Drenagem linfática" }).resposta_sugerida;
+    for (const p of proibidos) {
+      assert.doesNotMatch(t, p, `"${m}" reproduziu um traço do sistema frio: ${p}`);
+    }
   }
 });
 
