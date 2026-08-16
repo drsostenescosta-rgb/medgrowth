@@ -208,7 +208,10 @@ const SINAL = ["sinal", "deposito", "adiantamento", "pagar antes", "reservar pag
 const LISTA_ESPERA = ["lista de espera", "fila de espera", "me avisa se abrir", "avisa se vagar", "me avisa se desmarcar"];
 
 // Alegação bloqueada (regra 9) — qualquer variação de resultado numérico do EMSzero.
-const EMSZERO = ["emszero", "ems zero", "ms zero", "emzero"];
+// Os dois nomes de propósito: em 16/08 Sostenes corrigiu que o aparelho dela é EMShape Neo
+// (ela escreveu EMSzero no questionário). Renomear e tirar o nome antigo abriria um buraco —
+// cliente que perguntar pelo nome velho, ou pelo novo, tem de bater na mesma trava.
+const EMSZERO = ["emszero", "ems zero", "ms zero", "emzero", "emshape", "em shape", "emshape neo", "emshape neo-x"];
 const ALEGACAO_CALORIA = ["caloria", "calorias", "queima", "equivale a", "abdominais", "dias de exercicio", "emagrece", "perde peso", "perder peso"];
 
 const CONFIRMA_EXPLICITA_PADRAO = ["sim", "confirmo", "confirmado", "pode confirmar", "confirmar"];
