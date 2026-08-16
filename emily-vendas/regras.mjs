@@ -967,9 +967,12 @@ export function decidir({ mensagem, operacao = {}, agenda = {}, clinica = {}, co
         corpo: ctx.primeiro_nome
           ? "me conta rapidinho o que você tá querendo melhorar? "
             + "Assim eu já te falo certinho o que a Andreia indica pro seu caso e quanto fica."
+          // As tres categorias vem do AUDIO dela (16/08): "quais sao as suas queixas, se e gordura
+          // localizada, flacidez, tonificacao muscular". Pergunta aberta trava a cliente; tres
+          // opcoes fazem ela conseguir responder. A mudanca veio da voz dela, nao de teoria.
           : "como você se chama? "
-            + "A Andreia é massoterapeuta e esteticista há 10 anos, e é ela quem vê o que faz "
-            + "sentido pro seu caso.",
+            + "E me conta quais são as suas queixas: é gordura localizada, flacidez ou "
+            + "tonificação muscular?",
         acao_agenda: { tipo: "nenhuma", detalhe: "Descoberta em andamento — nada agendado." },
         bloqueios: [
           "NENHUM valor nesta mensagem",

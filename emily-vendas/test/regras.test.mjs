@@ -199,8 +199,11 @@ test("sem saber o nome, a Emily pergunta o nome antes de qualquer outra coisa", 
   const r = d("quanto custa?");
   assert.equal(r.regra, "COM.PRECO_DESCOBERTA");
   assert.match(r.resposta_sugerida, /como você se chama\?/i, "o passo 1 dela é perguntar o nome");
-  assert.match(r.resposta_sugerida, /10 anos/, "a credencial dela é a prova social que ela mesma usa");
-  assert.doesNotMatch(r.resposta_sugerida, /querendo melhorar/i, "uma pergunta por mensagem, como ela faz");
+  // As tres categorias saem do audio dela (16/08): "quais sao as suas queixas, se e gordura
+  // localizada, flacidez, tonificacao muscular". Pergunta aberta trava; opcao destrava.
+  for (const cat of [/gordura localizada/i, /flacidez/i, /tonificação muscular/i]) {
+    assert.match(r.resposta_sugerida, cat, `faltou a categoria ${cat} que ela mesma oferece`);
+  }
   assert.doesNotMatch(r.resposta_sugerida, /US\$/, "nenhum valor antes da descoberta");
 });
 
