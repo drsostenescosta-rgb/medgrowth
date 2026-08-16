@@ -93,3 +93,17 @@ Ordem de execução sugerida (≈ 1 semana de trabalho + 4 semanas de teste):
 ---
 
 *Regra de manutenção: task nova só entra com justificativa citando fonte (reunião, benchmark ou ativo). Sem fonte, vai para o Descobre do próximo ciclo.*
+
+---
+
+## E7 — Radar de Oportunidades (predição de compra) — registrado 2026-08-11, proposto por Sostenes
+
+**Tese:** o CRM projeta oportunidades por cliente: janela de renovação do procedimento + ponte de cross-sell do catálogo + score de propensão transparente. "Cliente agendado para {{data}} → oferecer {{servico}} → score A/B/C com motivo escrito."
+
+**Gate de entrada:** SÓ inicia após o teste com a clínica-piloto passar no go/no-go (anti-backlog vigente: sem upsell antes disso).
+
+- **E7-T1 [P2/S]** `knowledge/janelas-renovacao.md`: intervalo de recompra por procedimento (toxina 3-4m, preenchimento 9-12m, limpeza 45-60d, pacotes sessão N+1, HIFEM ciclo de manutenção) com fonte clínica — alimenta a cadência de follow-up JÁ existente. *Pode ser escrito antes do gate: é conhecimento, não feature.*
+- **E7-T2 [P2/M]** `radar.mjs`: para cada lead do funil, calcular oportunidades = janelas vencendo + pontes do catálogo + score heurístico (recência, frequência, comparecimento, estágio) com o PORQUÊ; board "oportunidades da semana" no funil.
+- **E7-T3 [P2/S]** Emily consome o radar: no follow-up da cadência, a mensagem cita a oportunidade com motivo verdadeiro ("faz 3 meses do seu botox…"). Sem pressão; compliance de sempre.
+- **E7-T4 [P2/M — pós ~100 desfechos]** Calibração: regressão sobre ofereceu→fechou por perfil; score vira probabilidade % real. PROIBIDO exibir % antes da calibração (precisão-fake).
+- **LGPD:** predição usa só dados coletados com consentimento no próprio funil; nada de inferência sensível fora do escopo do atendimento.
