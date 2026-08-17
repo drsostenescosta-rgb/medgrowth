@@ -81,10 +81,11 @@
     },
     "conteudo_bloqueado": [
       {
-        "alegacao": "EMSzero / EMS Zero / MS Zero queima ate 1.000 calorias",
+        "alegacao": "EMShape Neo / EMSzero / EMS Zero / MS Zero queima ate 1.000 calorias",
         "status": "BLOQUEADA",
         "motivo": "Alegacao de resultado sem fonte tecnica verificavel (PRD RF-06). Vale para qualquer variacao: 'queima X calorias', 'equivale a N dias de exercicio', 'equivale a N abdominais'.",
-        "descricao_aprovada": "O EMSzero e uma maquina de tonificacao muscular que trabalha tres areas em uma sessao: abdomen, posterior e gluteos."
+        "descricao_aprovada": "O EMShape Neo e uma maquina de tonificacao muscular que trabalha tres areas em uma sessao: abdomen, posterior e gluteos.",
+        "_nome_corrigido": "16/08/2026: Sostenes confirmou que o aparelho e EMShape Neo; ela escreveu EMSzero no questionario de 11/08. O nome antigo continua na lista de deteccao de proposito."
       },
       {
         "alegacao": "qualquer promessa de resultado corporal, clinico ou de perda de peso",
@@ -191,6 +192,11 @@
       "responder novos pedidos em ate 15 minutos",
       "criar um plano piloto de divulgacao"
     ]
+  },
+  "_equipamentos": {
+    "_status": "Nome corrigido em 16/08/2026 por Sostenes. Marca/modelo dos outros dois (radiofrequencia e ultracavitacao) ainda NAO informados.",
+    "contracao_muscular": "EMShape Neo",
+    "fda": "NAO AFIRMAR. O banco 510(k) da FDA nao retorna nada para 'EMShape' (consultado via openFDA em 16/08; a API responde — BTL volta com K233849, K213344). Isso nao prova ausencia: a Emsculpt, por exemplo, e registrada como BTL-899A e nao pelo nome comercial. So escrever 'FDA 510(k) K_____' depois que o fornecedor informar o numero K e eu confirmar no banco."
   },
   "_gerado_por": "emily-vendas/scripts/sincronizar-config.mjs — copia para o deploy. NAO editar aqui; edite em clinic-now-piloto-familia/config."
 }
