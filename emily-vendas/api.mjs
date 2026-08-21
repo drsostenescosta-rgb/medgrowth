@@ -26,6 +26,7 @@ import { homedir } from "node:os";
 import { avaliarPreflight } from "./preflight.mjs";
 import { proximosLivres } from "./interpretar-horarios.mjs";
 import { decidir } from "./regras.mjs";
+import { gerarBriefingGestora } from "./briefing-gestora.mjs";
 // Namespace, e não imports soltos: o ledger virou peça trocável. Em disco (aqui, no Mac) ou em
 // Postgres (na nuvem, onde não existe disco). A mesma superfície nos dois — quem troca é quem
 // chama `criarHandler`, e nenhuma rota sabe qual está em uso.
@@ -391,6 +392,12 @@ export function criarHandler({
         decisao.texto_polido_por_llm = polimento.polido;
         if (!polimento.polido) decisao.motivo_sem_polimento = polimento.motivo;
         decisao.origem_ocupacoes = { fonte: oc.fonte, motivo: oc.motivo, frescor_min: oc.frescor_min, horarios_de: livres.fonte };
+        decisao.briefing_gestora = gerarBriefingGestora({
+          decisao,
+          contexto,
+          operacao: cfg.operacao || {},
+          clinica: cfg.clinica || {},
+        });
 
         const id = await ledger.novaProposta({
           canal,

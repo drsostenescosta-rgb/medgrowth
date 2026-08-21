@@ -3,6 +3,16 @@
 Motor de conversa + agenda + funil da **Emily**, assistente de WhatsApp da clínica de estética e
 emagrecimento (ICP: a clínica da mãe do fundador — PRD `../docs/PRD-clinicnow.md`).
 
+> **Identidade:** este motor pertence à **Emily ClinicNow**, secretária de clínicas. Ele não lê nem
+> herda qualquer contexto da Emily pessoal de Sostenes e toda configuração é isolada por clínica.
+
+## Copiloto privado da gestora
+
+`briefing-gestora.mjs` transforma a decisão determinística em um briefing comercial separado da
+mensagem da paciente. Ele sugere perguntas e próximos passos, limita oportunidades ao catálogo
+configurado e desliga vendas em casos clínicos, urgentes ou de privacidade. Na Fase 1, o painel
+apenas permite copiar o briefing; nenhum WhatsApp é enviado automaticamente.
+
 **Conversão-mestre: AGENDAR A AVALIAÇÃO.** Nada de preço fora da tabela oficial, nada de link de
 pagamento, nada de promessa de resultado. Compliance completo no system prompt
 (`../knowledge/system-prompt-emily-vendas-v1.md`) e nos 2 catálogos de `../knowledge/`.
